@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>SAS Defect Management</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans text-gray-900">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // --- Mock Data Options ---
+    const SITES = ['Project A (Sukhumvit)', 'Project B (Sathorn)', 'Project C (Ari)'];
+    const OWNERS = ['บริษัท นิติบุคคล จำกัด', 'บริษัท บริหารอาคารไทย จำกัด'];
+    const STAFFS = ['สมชาย ช่างซ่อม', 'สมหญิง แอดมิน', 'USER_CURRENT'];
+    const MAIN_CATEGORIES = ['งานโครงสร้าง', 'งานสถาปัตย์', 'งานระบบไฟฟ้า', 'งานระบบประปา'];
+    const SUB_CATEGORIES = {
+      'งานโครงสร้าง': ['ผนังร้าว', 'พื้นทรุด'],
+      'งานสถาปัตย์': ['สีลอกร่อน', 'กระเบื้องแตก', 'บัวหลุด'],
+      'งานระบบไฟฟ้า': ['ปลั๊กเสีย', 'ไฟไม่ติด'],
+      'งานระบบประปา': ['ท่อรั่ว', 'ก๊อกน้ำซึม']
+    };
+    const TEAMS = ['ทีมช่างสี (Internal)', 'ทีมช่างไฟ (Internal)', 'Supplier A (โครงสร้าง)', 'Supplier B (ประปา)'];
+
+    // --- SVG Icons Components ---
+    const IconPlus = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>;
+    const IconX = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>;
+    const IconHome = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
+    const IconChevronRight = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>;
+    const IconSave = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
+    const IconClipboard = () => <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 14h6"/><path d="M9 18h6"/><path d="M9 10h6"/></svg>;
+
+    function App() {
+      const [view, setView] = useState('JOB_LIST');
+      const [jobs, setJobs] = useState([]);
+      const [isLoading, setIsLoading] = useState(true);
+      const [isSaving, setIsSaving] = useState(false);
+      
+      const [activeJobId, setActiveJobId] = useState(null);
+      const [activeTaskId, setActiveTaskId] = useState(null);
+
+      const [showJobForm, setShowJobForm] = useState(false);
+      const [showTaskForm, setShowTaskForm] = useState(false);
+      const [showDefectForm, setShowDefectForm] = useState(false);
+
+      const activeJob = jobs.find(j => j.id === activeJobId);
+      const activeTask = activeJob?.tasks.find(t => t.id === activeTaskId);
+
+      // โหลดข้อมูลจาก Google Sheets
+      const fetchData = () => {
+        setIsLoading(true);
+        google.script.run
+          .withSuccessHandler(data => {
+            setJobs(JSON.parse(data));
+            setIsLoading(false);
+          })
+          .withFailureHandler(err => {
+            console.error(err);
+            alert('เกิดข้อผิดพลาดในการโหลดข้อมูล');
+            setIsLoading(false);
+          })
+          .getAllData();
+      };
+
+      useEffect(() => {
+        fetchData();
+      }, []);
+
+      const handleCreateJob = (formData) => {
+        setIsSaving(true);
+        google.script.run
+          .withSuccessHandler(newId => {
+            fetchData(); // Reload data
+            setShowJobForm(false);
+            setIsSaving(false);
+          })
+          .addJob(formData);
+      };
+
+      const handleCreateTask = (formData) => {
+        setIsSaving(true);
+        google.script.run
+          .withSuccessHandler(newId => {
+            fetchData(); // Reload data
+            setShowTaskForm(false);
+            setIsSaving(false);
+          })
+          .addTask(activeJobId, formData);
+      };
+
+      const handleCreateDefect = (formData) => {
+        setIsSaving(true);
+        google.script.run
+          .withSuccessHandler(newId => {
+            fetchData(); // Reload data
+            setShowDefectForm(false);
+            setIsSaving(false);
+          })
+          .addDefect(activeTaskId, formData);
+      };
+
+      // --- Modals ---
+      const JobModal = () => {
+        const [formData, setFormData] = useState({ site: SITES[0], owner: OWNERS[0], ownerCompany: '', staff: STAFFS[2], replyDueDate: '', remark: '' });
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg w-full max-w-2xl p-6 shadow-xl">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-800">สร้างใบงานหลัก (JOB)</h2>
+                <button onClick={() => setShowJobForm(false)} className="text-gray-500 hover:text-red-500"><IconX /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Site *</label>
+                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.site} onChange={e => setFormData({...formData, site: e.target.value})}>
+                    {SITES.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">ผู้ดูแล (Owner) *</label>
+                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.owner} onChange={e => setFormData({...formData, owner: e.target.value})}>
+                    {OWNERS.map(o => <option key={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">ชื่อบริษัทผู้ดูแล</label>
+                  <input type="text" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.ownerCompany} onChange={e => setFormData({...formData, ownerCompany: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">ชื่อ Staff *</label>
+                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.staff} onChange={e => setFormData({...formData, staff: e.target.value})}>
+                    {STAFFS.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">กำหนดวันตอบกลับ Owner</label>
+                  <input type="date" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.replyDueDate} onChange={e => setFormData({...formData, replyDueDate: e.target.value})} />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">หมายเหตุ</label>
+                  <textarea className="mt-1 block w-full rounded-md border border-gray-300 p-2" rows="2" value={formData.remark} onChange={e => setFormData({...formData, remark: e.target.value})}></textarea>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button onClick={() => setShowJobForm(false)} className="px-4 py-2 border rounded-md text-gray-600 hover:bg-gray-50">ยกเลิก</button>
+                <button onClick={() => handleCreateJob(formData)} disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
+                  {isSaving ? 'กำลังบันทึก...' : <><span className="mr-2"><IconSave/></span> บันทึก</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      const TaskModal = () => {
+        const [formData, setFormData] = useState({ scope: 'SAS', building: '', unit: '', customerName: '', targetFixDate: '', remark: '' });
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg w-full max-w-2xl p-6 shadow-xl">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-800">สร้างใบงานย่อย (TASK)</h2>
+                <button onClick={() => setShowTaskForm(false)} className="text-gray-500 hover:text-red-500"><IconX /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">Scope งาน *</label>
+                  <div className="mt-2 flex gap-4">
+                    <label className="inline-flex items-center">
+                      <input type="radio" className="form-radio text-blue-600 w-5 h-5" value="SAS" checked={formData.scope === 'SAS'} onChange={e => setFormData({...formData, scope: e.target.value})} />
+                      <span className="ml-2">SAS (ในความรับผิดชอบ)</span>
+                    </label>
+                    <label className="inline-flex items-center">
+                      <input type="radio" className="form-radio text-purple-600 w-5 h-5" value="VO" checked={formData.scope === 'VO'} onChange={e => setFormData({...formData, scope: e.target.value})} />
+                      <span className="ml-2">VO (นอกเหนือความรับผิดชอบ)</span>
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Building *</label>
+                  <input type="text" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.building} onChange={e => setFormData({...formData, building: e.target.value})} placeholder="ex. Tower A" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Unit No. *</label>
+                  <input type="text" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} placeholder="ex. A101" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">ชื่อลูกค้า *</label>
+                  <input type="text" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">กำหนดวันเข้าแก้ไข *</label>
+                  <input type="date" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.targetFixDate} onChange={e => setFormData({...formData, targetFixDate: e.target.value})} />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button onClick={() => setShowTaskForm(false)} className="px-4 py-2 border rounded-md text-gray-600 hover:bg-gray-50">ยกเลิก</button>
+                <button onClick={() => handleCreateTask(formData)} disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
+                   {isSaving ? 'กำลังบันทึก...' : <><span className="mr-2"><IconSave/></span> บันทึก</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      const DefectModal = () => {
+        const isVO = activeTask?.scope === 'VO';
+        const [formData, setFormData] = useState({ mainCategory: MAIN_CATEGORIES[0], subCategory: SUB_CATEGORIES[MAIN_CATEGORIES[0]][0], description: '', team: TEAMS[0], targetStartDate: '', targetEndDate: '', voSteps: '', remark: '' });
+
+        const handleMainCatChange = (e) => {
+          const main = e.target.value;
+          setFormData({...formData, mainCategory: main, subCategory: SUB_CATEGORIES[main][0] || ''});
+        };
+
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-10">
+            <div className="bg-white rounded-lg w-full max-w-3xl p-6 shadow-xl my-auto">
+              <div className="flex justify-between items-center border-b pb-3 mb-4">
+                <h2 className="text-xl font-bold text-gray-800">เพิ่มรายการ Defect</h2>
+                <button onClick={() => setShowDefectForm(false)} className="text-gray-500 hover:text-red-500"><IconX /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">ลักษณะงานหลัก *</label>
+                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.mainCategory} onChange={handleMainCatChange}>
+                    {MAIN_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">ลักษณะงานรอง *</label>
+                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.subCategory} onChange={e => setFormData({...formData, subCategory: e.target.value})}>
+                    {(SUB_CATEGORIES[formData.mainCategory] || []).map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">รายละเอียด Defect *</label>
+                  <textarea className="mt-1 block w-full rounded-md border border-gray-300 p-2" rows="2" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})}></textarea>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">ทีมเข้าแก้ไข *</label>
+                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.team} onChange={e => setFormData({...formData, team: e.target.value})}>
+                    {TEAMS.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div></div>
+                
+                {isVO && (
+                  <div className="col-span-2 bg-purple-50 p-4 rounded-lg border border-purple-100 mt-2">
+                    <label className="block text-sm font-medium text-purple-800">ขั้นตอนการแก้ไข (เฉพาะงาน VO) *</label>
+                    <textarea className="mt-1 block w-full rounded-md border border-purple-200 p-2" rows="2" placeholder="ระบุขั้นตอนการทำงานเพื่อประเมิน BOQ..." value={formData.voSteps} onChange={e => setFormData({...formData, voSteps: e.target.value})}></textarea>
+                  </div>
+                )}
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button onClick={() => setShowDefectForm(false)} className="px-4 py-2 border rounded-md text-gray-600 hover:bg-gray-50">ยกเลิก</button>
+                <button onClick={() => handleCreateDefect(formData)} disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
+                  {isSaving ? 'กำลังบันทึก...' : <><span className="mr-2"><IconSave/></span> บันทึก Defect</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // --- Render Views ---
+      if (isLoading) {
+        return <div className="flex items-center justify-center min-h-screen text-blue-600 text-xl font-bold">กำลังโหลดข้อมูลจาก Google Sheets...</div>;
+      }
+
+      return (
+        <div className="min-h-screen">
+          <nav className="bg-slate-900 text-white shadow-md">
+            <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+              <div className="flex items-center cursor-pointer" onClick={() => setView('JOB_LIST')}>
+                <IconClipboard />
+                <span className="ml-3 font-bold text-xl">SAS Defect Management</span>
+              </div>
+            </div>
+          </nav>
+
+          <main className="max-w-7xl mx-auto px-4 py-8">
+            {view === 'JOB_LIST' && (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm">
+                  <h1 className="text-2xl font-bold text-gray-800">ภาพรวมใบงานหลัก (Jobs)</h1>
+                  <button onClick={() => setShowJobForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
+                    <span className="mr-1"><IconPlus /></span> สร้างใบงานหลัก
+                  </button>
+                </div>
+                <div className="bg-white rounded-lg shadow-sm overflow-hidden overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job ID</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Site</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Tasks</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">จัดการ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {jobs.map((job) => (
+                        <tr key={job.id} className="hover:bg-blue-50">
+                          <td className="px-6 py-4 font-medium text-blue-600">{job.id}</td>
+                          <td className="px-6 py-4 text-sm">{job.site}</td>
+                          <td className="px-6 py-4 text-sm">{job.ownerCompany || job.owner}</td>
+                          <td className="px-6 py-4 text-sm text-center">
+                            <span className="bg-gray-100 px-3 py-1 rounded-full font-bold text-xs">{job.tasks ? job.tasks.length : 0}</span>
+                          </td>
+                          <td className="px-6 py-4 text-right text-sm font-medium">
+                            <button onClick={() => { setActiveJobId(job.id); setView('JOB_DETAIL'); }} className="text-blue-600 hover:text-blue-900 inline-flex items-center">
+                              เปิดดู <IconChevronRight />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {jobs.length === 0 && <tr><td colSpan="5" className="px-6 py-10 text-center text-gray-500">ไม่มีข้อมูลใบงานหลัก</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {view === 'JOB_DETAIL' && (
+              <div className="space-y-4">
+                <div className="flex items-center text-sm text-gray-500 bg-white p-3 rounded-lg shadow-sm">
+                  <button onClick={() => setView('JOB_LIST')} className="hover:text-blue-600 flex items-center"><span className="mr-1"><IconHome/></span> หน้าแรก</button>
+                  <span className="mx-2"><IconChevronRight /></span>
+                  <span className="font-semibold text-gray-800">{activeJob?.id}</span>
+                </div>
+                <div className="bg-white p-6 rounded-lg shadow-sm border-t-4 border-blue-600 flex justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800">Job: {activeJob?.id}</h2>
+                    <p className="text-gray-600">{activeJob?.site} | Owner: {activeJob?.ownerCompany}</p>
+                  </div>
+                  <button onClick={() => setShowTaskForm(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
+                    <span className="mr-1"><IconPlus /></span> สร้างใบงานย่อย (Task)
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                  {activeJob?.tasks?.map(task => (
+                    <div key={task.id} className="bg-white rounded-lg shadow-sm p-5 border hover:shadow-md relative overflow-hidden">
+                      <div className={`absolute top-0 left-0 w-1 h-full ${task.scope === 'SAS' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="font-bold text-lg">{task.id}</span>
+                        <span className={`px-2 py-1 text-xs font-bold rounded-full ${task.scope === 'SAS' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                          {task.scope}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">ยูนิต: {task.building} - {task.unit}</p>
+                      <p className="text-sm text-gray-600 mb-4">Defects: {task.defects?.length || 0} รายการ</p>
+                      <button onClick={() => { setActiveTaskId(task.id); setView('TASK_DETAIL'); }} className="w-full py-2 bg-gray-50 hover:bg-gray-100 border rounded-md text-sm font-medium">จัดการ Defect</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {view === 'TASK_DETAIL' && (
+              <div className="space-y-4">
+                <div className="flex items-center text-sm text-gray-500 bg-white p-3 rounded-lg shadow-sm">
+                  <button onClick={() => setView('JOB_LIST')} className="hover:text-blue-600 flex items-center"><span className="mr-1"><IconHome/></span></button>
+                  <span className="mx-2"><IconChevronRight /></span>
+                  <button onClick={() => setView('JOB_DETAIL')} className="hover:text-blue-600">{activeJob?.id}</button>
+                  <span className="mx-2"><IconChevronRight /></span>
+                  <span className="font-semibold text-gray-800">{activeTask?.id}</span>
+                </div>
+                <div className={`bg-white p-6 rounded-lg shadow-sm border-t-4 ${activeTask?.scope === 'SAS' ? 'border-blue-500' : 'border-purple-500'} flex justify-between`}>
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800">Task: {activeTask?.id}</h2>
+                    <p className="text-gray-600">ยูนิต: {activeTask?.unit} | ลูกค้า: {activeTask?.customerName}</p>
+                  </div>
+                  <button onClick={() => setShowDefectForm(true)} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center">
+                    <span className="mr-1"><IconPlus /></span> เพิ่ม Defect
+                  </button>
+                </div>
+                <div className="bg-white rounded-lg shadow-sm mt-6 overflow-hidden overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Defect ID</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">หมวดหมู่</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">รายละเอียด</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">สถานะ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {activeTask?.defects?.map((defect) => (
+                        <tr key={defect.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 text-sm font-medium">{defect.id}</td>
+                          <td className="px-6 py-4 text-sm">
+                            <div className="font-semibold">{defect.mainCategory}</div>
+                            <div className="text-xs text-gray-500">{defect.subCategory}</div>
+                          </td>
+                          <td className="px-6 py-4 text-sm max-w-xs truncate">{defect.description}</td>
+                          <td className="px-6 py-4 text-sm"><span className="px-2 py-1 bg-gray-100 rounded-full text-xs font-bold">{defect.status}</span></td>
+                        </tr>
+                      ))}
+                      {(!activeTask?.defects || activeTask?.defects.length === 0) && (
+                        <tr><td colSpan="4" className="px-6 py-10 text-center text-gray-500">ไม่มีรายการ Defect</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </main>
+
+          {showJobForm && <JobModal />}
+          {showTaskForm && <TaskModal />}
+          {showDefectForm && <DefectModal />}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
