@@ -1,4 +1,4 @@
-const SPREADSHEET_ID = '1BkhC_02odW8OINve6c3Ec4QI4cr_DEQvFGCVWrgebfg/'; // ตรวจสอบให้แน่ใจว่าใส่ ID Sheet ถูกต้อง
+const SPREADSHEET_ID = '1BkhC_02odW8OINve6c3Ec4QI4cr_DEQvFGCVWrgebfg'; // ตรวจสอบให้แน่ใจว่าใส่ ID Sheet ถูกต้อง
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
@@ -53,24 +53,19 @@ function getAllData() {
   const structuredJobs = jobs.map(job => {
     const jobTasks = tasks.filter(t => t.JobID === job.JobID).map(task => {
       const taskDefects = defects.filter(d => d.TaskID === task.TaskID).map(def => ({
-        id: def.DefectID,
-        mainCategory: def.MainCategory,
-        subCategory: def.SubCategory,
-        description: def.Description,
-        major: def.Major, // ดึงค่า Major
-        team: def.Team,
-        imgUnit: def.ImgUnit, // ดึงค่ารูปภาพ
-        imgBefore: def.ImgBefore,
-        imgDuring: def.ImgDuring,
-        imgAfter: def.ImgAfter,
-        targetStartDate: def.TargetStartDate,
-        targetEndDate: def.TargetEndDate,
-        voSteps: def.VOSteps,
-        actualStartDate: def.ActualStartDate,
-        actualEndDate: def.ActualEndDate,
-        status: def.Status,
-        remark: def.Remark
-      }));
+          id: def.DefectID || def['DefectID'],
+          mainCategory: def.MainCategory || def['ลักษณะงานหลัก'],
+          subCategory: def.SubCategory || def['ลักษณะงานรอง'],
+          description: def.Description || def['รายละเอียด'],
+          major: def.Major || def['Major'], 
+          team: def.Team || def['ทีมเข้าแก้ไข'],
+          imgUnit: def.ImgUnit || def['รูปภาพเลขยูนิต'], 
+          imgBefore: def.ImgBefore || def['รูปภาพก่อนแก้ไข'],
+          imgDuring: def.ImgDuring || def['รูปภาพระหว่างแก้ไข'],
+          imgAfter: def.ImgAfter || def['รูปภาพหลังแก้ไข'],
+          status: def.Status || def['DefectStatus'] || def['สถานะ defect'],
+          remark: def.Remark || def['หมายเหตุ'] || ''
+        }));
 
       return {
         id: task.TaskID,
@@ -102,34 +97,76 @@ function getAllData() {
 
   return JSON.stringify(structuredJobs);
 }
+// ฟังก์ชันสำหรับสร้างใบงานหลัก (JOB)
+function addJob(formData) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('JOB');
+  const newId = 'JOB-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
+  
+  sheet.appendRow([
+    newId,                        // JobID
+    formData.site || '',          // Site
+    formData.owner || '',         // Owner
+    formData.ownerCompany || '',  // OwnerCompany
+    formData.staff || '',         // Staff
+    formData.replyDueDate || '',  // ReplyDueDate
+    formData.remark || '',        // Remark
+    new Date()                    // Timestamp
+  ]);
+  
+  return newId;
+}
 
-// 3. ปรับฟังก์ชัน addDefect ให้บันทึกลงคอลัมน์ A ถึง O ตาม Requirement
+// ฟังก์ชันสำหรับสร้างใบงานย่อย (TASK)
+function addTask(jobId, formData) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('TASK');
+  const newId = 'TSK-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
+  
+  sheet.appendRow([
+    newId,                        // TaskID
+    jobId,                        // JobID
+    formData.scope || 'SAS',      // Scope
+    formData.building || '',      // Building
+    formData.unit || '',          // Unit
+    'รอดำเนินการ',                  // Status
+    formData.customerName || '',  // CustomerName
+    formData.targetFixDate || '', // TargetFixDate
+    '',                           // ActualStartDate
+    '',                           // ActualEndDate
+    '',                           // Duration
+    formData.remark || '',        // Remark
+    new Date()                    // Timestamp
+  ]);
+  
+  return newId;
+}
+
 function addDefect(taskId, defectData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('DEFECT');
   const newId = 'DEF-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
+
+  // สร้าง Array ขนาด 15 ช่อง (Index 0 ถึง 14) เพื่อล็อคคอลัมน์ A ถึง O ให้ตรงเป๊ะ
+  const rowData = new Array(15).fill('');
   
-  sheet.appendRow([
-    newId,                        // Col A: DefectID
-    taskId,                       // Col B: TaskID
-    defectData.targetStartDate || '', // Col C
-    defectData.targetEndDate || '',   // Col D
-    'ยังไม่แก้ไข',                  // Col E: สถานะ defect
-    defectData.mainCategory,      // Col F: ลักษณะงานหลัก
-    defectData.subCategory,       // Col G: ลักษณะงานรอง
-    defectData.description,       // Col H: รายละเอียด
-    defectData.major,             // Col I: Major (ใช่/ไม่ใช่)
-    defectData.team,              // Col J: ทีมเข้าแก้ไข
-    '',                           // Col K: รูปเลขยูนิต
-    '',                           // Col L: รูปก่อนแก้ไข
-    '',                           // Col M: รูประหว่างแก้ไข
-    '',                           // Col N: รูปหลังแก้ไข
-    new Date(),                   // Col O: Timestamp
-    defectData.voSteps || '',     // Col P
-    '',                           // Col Q
-    '',                           // Col R
-    defectData.remark || ''       // Col S
-  ]);
+  rowData[0] = newId;                        // Col A: DefectID
+  rowData[1] = taskId;                       // Col B: TaskID
+  // Col C (joB) และ D (Scope) ปล่อยว่างไว้ตาม Prompt หรือรอรับค่าจาก Task
+  rowData[4] = 'ยังไม่แก้ไข';                  // Col E: สถานะ defect (DefectStatus)
+  rowData[5] = defectData.mainCategory;      // Col F: ลักษณะงานหลัก
+  rowData[6] = defectData.subCategory;       // Col G: ลักษณะงานรอง
+  rowData[7] = defectData.description;       // Col H: รายละเอียด
+  rowData[8] = defectData.major;             // Col I: Major (ใช่/ไม่ใช่)
+  rowData[9] = defectData.team;              // Col J: ทีมเข้าแก้ไข
+  // Col K - N ปล่อยว่างไว้รอระบบอัปโหลดรูปภาพทีหลัง
+  rowData[10] = '';                          // Col K: รูปภาพเลขยูนิต
+  rowData[11] = '';                          // Col L: รูปภาพก่อนแก้ไข
+  rowData[12] = '';                          // Col M: รูปภาพระหว่างแก้ไข
+  rowData[13] = '';                          // Col N: รูปภาพหลังแก้ไข
+  rowData[14] = new Date();                  // Col O: Timestamp
+
+  sheet.appendRow(rowData);
   return newId;
 }
 
