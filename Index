@@ -152,6 +152,10 @@
             setShowJobForm(false);
             setIsSaving(false);
           })
+          .withFailureHandler(err => {
+            alert('เกิดข้อผิดพลาดในการสร้าง Job: ' + err.message);
+            setIsSaving(false);
+          })
           .addJob(formData);
       };
 
@@ -163,6 +167,10 @@
             setShowTaskForm(false);
             setIsSaving(false);
           })
+          .withFailureHandler(err => {
+            alert('เกิดข้อผิดพลาดในการสร้าง Task: ' + err.message);
+            setIsSaving(false);
+          })
           .addTask(activeJobId, formData);
       };
 
@@ -172,6 +180,10 @@
           .withSuccessHandler(newId => {
             fetchData();
             setShowDefectForm(false);
+            setIsSaving(false);
+          })
+          .withFailureHandler(err => {
+            alert('เกิดข้อผิดพลาดในการสร้าง Defect: ' + err.message);
             setIsSaving(false);
           })
           .addDefect(activeTaskId, formData);
