@@ -6,6 +6,7 @@ function doGet() {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
+
 // 1. อัปเดตโครงสร้าง Sheet DEFECT ให้ตรงกับ Col A ถึง O (คอลัมน์ C,D ขออนุญาตเก็บเป็น TargetDate เดิมไว้เพื่อไม่ให้กระทบระบบอื่น)
 function initSheets() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -97,6 +98,7 @@ function getAllData() {
 
   return JSON.stringify(structuredJobs);
 }
+
 // ฟังก์ชันสำหรับสร้างใบงานหลัก (JOB)
 function addJob(formData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -219,6 +221,7 @@ function uploadDefectImages(defectId, imagesPayload) {
 
   return "Success";
 }
+
 // ฟังก์ชันสำหรับแก้ไขใบงานหลัก (JOB)
 function updateJob(formData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -248,4 +251,81 @@ function updateJob(formData) {
   sheet.getRange(rowIndex, 7).setValue(formData.remark || '');
 
   return "Update Success";
+}
+
+// ฟังก์ชันสำหรับดึงข้อมูล Master Data จาก Sheet 'Project' และ 'Owner'
+function getMasterData() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let result = { sites: [], owners: [] };
+
+  // 1. ดึงข้อมูล Site จาก Sheet 'Project' คอลัมน์ B (เริ่มแถวที่ 2)
+  const projectSheet = ss.getSheetByName('Project');
+  if (projectSheet) {
+    const pLastRow = projectSheet.getLastRow();
+    if (pLastRow >= 2) {
+      const pData = projectSheet.getRange(2, 2, pLastRow - 1, 1).getDisplayValues();
+      const sites = pData.map(r => r[0]).filter(s => s !== '');
+      result.sites = [...new Set(sites)]; // กรองเอาเฉพาะรายชื่อที่ไม่ซ้ำกัน
+    }
+  }
+
+  // 2. ดึงข้อมูล Owner จาก Sheet 'Owner' คอลัมน์ B, C, D
+  const ownerSheet = ss.getSheetByName('Owner');
+  if (ownerSheet) {
+    const oLastRow = ownerSheet.getLastRow();
+    if (oLastRow >= 2) {
+      // Index 0 = Col B, Index 1 = Col C, Index 2 = Col D
+      const oData = ownerSheet.getRange(2, 2, oLastRow - 1, 3).getDisplayValues();
+      result.owners = oData
+        .filter(row => row[2] !== '') // กรองแถวที่ 'ผู้ดูแล' (Col D) ไม่เป็นค่าว่าง
+        .map(row => ({
+          ownerCompany: row[0], // ดึงข้อมูลจาก Col B: ชื่อบริษัท
+          site: row[1],         // ดึงข้อมูลจาก Col C: Site (ใช้สำหรับเชื่อมโยงกัน)
+          owner: row[2]         // ดึงข้อมูลจาก Col D: ผู้ดูแล (Owner)
+        }));
+    }
+  }
+
+  return JSON.stringify(result);
+}
+// ฟังก์ชันสำหรับลบใบงานหลัก (JOB)
+function deleteJob(jobId) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('JOB');
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === jobId) {
+      sheet.deleteRow(i + 1);
+      return "Success";
+    }
+  }
+  throw new Error("ไม่พบ JobID ที่ต้องการลบ");
+}
+
+// ฟังก์ชันสำหรับลบใบงานย่อย (TASK)
+function deleteTask(taskId) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('TASK');
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === taskId) {
+      sheet.deleteRow(i + 1);
+      return "Success";
+    }
+  }
+  throw new Error("ไม่พบ TaskID ที่ต้องการลบ");
+}
+
+// ฟังก์ชันสำหรับลบรายการ Defect
+function deleteDefect(defectId) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('DEFECT');
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === defectId) {
+      sheet.deleteRow(i + 1);
+      return "Success";
+    }
+  }
+  throw new Error("ไม่พบ DefectID ที่ต้องการลบ");
 }
