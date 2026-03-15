@@ -7,7 +7,7 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
-// 1. อัปเดตโครงสร้าง Sheet DEFECT ให้ตรงกับ Col A ถึง O (คอลัมน์ C,D ขออนุญาตเก็บเป็น TargetDate เดิมไว้เพื่อไม่ให้กระทบระบบอื่น)
+// 1. อัปเดตโครงสร้าง Sheet DEFECT ให้ตรงกับ Col A ถึง O
 function initSheets() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheetsInfo = {
@@ -16,7 +16,7 @@ function initSheets() {
     'DEFECT': [
       'DefectID', 'TaskID', 'TargetStartDate', 'TargetEndDate', 'Status', 'MainCategory', 
       'SubCategory', 'Description', 'Major', 'Team', 'ImgUnit', 'ImgBefore', 'ImgDuring', 'ImgAfter', 'Timestamp', 
-      'VOSteps', 'ActualStartDate', 'ActualEndDate', 'Remark' // นำฟิลด์ที่เหลือไปต่อท้าย
+      'VOSteps', 'ActualStartDate', 'ActualEndDate', 'Remark' 
     ]
   };
   Object.keys(sheetsInfo).forEach(name => {
@@ -29,7 +29,7 @@ function initSheets() {
   });
 }
 
-// 2. อัปเดต getAllData ให้ดึงข้อมูล Major และ รูปภาพออกมาด้วย
+// 2. ฟังก์ชันดึงข้อมูลทั้งหมด
 function getAllData() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   
@@ -99,71 +99,89 @@ function getAllData() {
   return JSON.stringify(structuredJobs);
 }
 
-// ฟังก์ชันสำหรับสร้างใบงานหลัก (JOB)
 function addJob(formData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('JOB');
   const newId = 'JOB-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
   
   sheet.appendRow([
-    newId,                        // JobID
-    formData.site || '',          // Site
-    formData.owner || '',         // Owner
-    formData.ownerCompany || '',  // OwnerCompany
-    formData.staff || '',         // Staff
-    formData.replyDueDate || '',  // ReplyDueDate
-    formData.remark || '',        // Remark
-    new Date()                    // Timestamp
+    newId,                        
+    formData.site || '',          
+    formData.owner || '',         
+    formData.ownerCompany || '',  
+    formData.staff || '',         
+    formData.replyDueDate || '',  
+    formData.remark || '',        
+    new Date()                    
   ]);
-  
   return newId;
 }
 
-// ฟังก์ชันสำหรับสร้างใบงานย่อย (TASK)
 function addTask(jobId, formData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('TASK');
   const newId = 'TSK-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
   
   sheet.appendRow([
-    newId,                        // TaskID
-    jobId,                        // JobID
-    formData.scope || 'SAS',      // Scope
-    formData.building || '',      // Building
-    formData.unit || '',          // Unit
-    'รอดำเนินการ',                  // Status
-    formData.customerName || '',  // CustomerName
-    formData.targetFixDate || '', // TargetFixDate
-    '',                           // ActualStartDate
-    '',                           // ActualEndDate
-    '',                           // Duration
-    formData.remark || '',        // Remark
-    new Date()                    // Timestamp
+    newId,                        
+    jobId,                        
+    formData.scope || 'SAS',      
+    formData.building || '',      
+    formData.unit || '',          
+    'รอดำเนินการ',                  
+    formData.customerName || '',  
+    formData.targetFixDate || '', 
+    '',                           
+    '',                           
+    '',                           
+    formData.remark || '',        
+    new Date()                    
   ]);
-  
   return newId;
 }
 
+// อัปเดตฟังก์ชันสร้าง Defect ให้รองรับอัปโหลดรูปภาพ 1 รูปตอนสร้าง
 function addDefect(taskId, defectData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('DEFECT');
   const newId = 'DEF-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
 
-  // สร้าง Array ขนาด 15 ช่อง (Index 0 ถึง 14) เพื่อล็อคคอลัมน์ A ถึง O ให้ตรงเป๊ะ
+  // ฟังก์ชันช่วยอัปโหลดรูปภาพลง Google Drive
+  function uploadBase64(base64Str, filename) {
+    if (!base64Str) return '';
+    try {
+      const splitBase = base64Str.split(',');
+      const contentType = splitBase[0].split(';')[0].replace('data:', '');
+      const byteCharacters = Utilities.base64Decode(splitBase[1]);
+      const blob = Utilities.newBlob(byteCharacters, contentType, filename);
+      const file = DriveApp.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      return file.getUrl();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // ตรวจสอบว่ามีการแนบรูปก่อนแก้ไขมาด้วยหรือไม่
+  let imgBeforeUrl = '';
+  if (defectData.imgBefore) {
+    const ts = new Date().getTime();
+    imgBeforeUrl = uploadBase64(defectData.imgBefore, `Before_${newId}_${ts}`);
+  }
+
+  // สร้าง Array ขนาด 15 ช่อง (Index 0 ถึง 14)
   const rowData = new Array(15).fill('');
   
   rowData[0] = newId;                        // Col A: DefectID
   rowData[1] = taskId;                       // Col B: TaskID
-  // Col C (joB) และ D (Scope) ปล่อยว่างไว้ตาม Prompt หรือรอรับค่าจาก Task
   rowData[4] = 'ยังไม่แก้ไข';                  // Col E: สถานะ defect (DefectStatus)
   rowData[5] = defectData.mainCategory;      // Col F: ลักษณะงานหลัก
   rowData[6] = defectData.subCategory;       // Col G: ลักษณะงานรอง
   rowData[7] = defectData.description;       // Col H: รายละเอียด
   rowData[8] = defectData.major;             // Col I: Major (ใช่/ไม่ใช่)
   rowData[9] = defectData.team;              // Col J: ทีมเข้าแก้ไข
-  // Col K - N ปล่อยว่างไว้รอระบบอัปโหลดรูปภาพทีหลัง
   rowData[10] = '';                          // Col K: รูปภาพเลขยูนิต
-  rowData[11] = '';                          // Col L: รูปภาพก่อนแก้ไข
+  rowData[11] = imgBeforeUrl;                // Col L: รูปภาพก่อนแก้ไข
   rowData[12] = '';                          // Col M: รูปภาพระหว่างแก้ไข
   rowData[13] = '';                          // Col N: รูปภาพหลังแก้ไข
   rowData[14] = new Date();                  // Col O: Timestamp
@@ -172,13 +190,12 @@ function addDefect(taskId, defectData) {
   return newId;
 }
 
-// 4. สร้างฟังก์ชันใหม่สำหรับบันทึกรูปภาพ 4 รูป
+// 4. บันทึกรูปภาพ 4 รูป
 function uploadDefectImages(defectId, imagesPayload) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('DEFECT');
   const data = sheet.getDataRange().getValues();
   
-  // หาแถวของ Defect นี้
   let rowIndex = -1;
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === defectId) {
@@ -188,7 +205,6 @@ function uploadDefectImages(defectId, imagesPayload) {
   }
   if (rowIndex === -1) return "Defect not found";
 
-  // ฟังก์ชันย่อยแปลง Base64 และสร้างไฟล์ใน Google Drive
   function uploadBase64(base64Str, filename) {
     if (!base64Str) return '';
     if (base64Str.startsWith('http')) return base64Str; // กรณีเป็น URL เดิมอยู่แล้ว
@@ -207,13 +223,11 @@ function uploadDefectImages(defectId, imagesPayload) {
 
   const ts = new Date().getTime();
   
-  // บันทึกไฟล์และรับ URL (ถ้าไม่ได้อัปโหลดใหม่ ให้ใช้ค่าเดิมในคอลัมน์ K,L,M,N)
   const imgUnitUrl = imagesPayload.imgUnit ? uploadBase64(imagesPayload.imgUnit, `Unit_${defectId}_${ts}`) : data[rowIndex-1][10];
   const imgBeforeUrl = imagesPayload.imgBefore ? uploadBase64(imagesPayload.imgBefore, `Before_${defectId}_${ts}`) : data[rowIndex-1][11];
   const imgDuringUrl = imagesPayload.imgDuring ? uploadBase64(imagesPayload.imgDuring, `During_${defectId}_${ts}`) : data[rowIndex-1][12];
   const imgAfterUrl = imagesPayload.imgAfter ? uploadBase64(imagesPayload.imgAfter, `After_${defectId}_${ts}`) : data[rowIndex-1][13];
 
-  // อัปเดตข้อมูลลงชีต Col K(11), L(12), M(13), N(14)
   sheet.getRange(rowIndex, 11).setValue(imgUnitUrl);
   sheet.getRange(rowIndex, 12).setValue(imgBeforeUrl);
   sheet.getRange(rowIndex, 13).setValue(imgDuringUrl);
@@ -222,17 +236,15 @@ function uploadDefectImages(defectId, imagesPayload) {
   return "Success";
 }
 
-// ฟังก์ชันสำหรับแก้ไขใบงานหลัก (JOB)
 function updateJob(formData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('JOB');
   const data = sheet.getDataRange().getValues();
   
-  // หาบรรทัดที่มี JobID ตรงกัน (เริ่มหาจากแถวที่ 2 เพราะแถว 1 คือ Header)
   let rowIndex = -1;
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === formData.id) { // Col A (Index 0) คือ JobID
-      rowIndex = i + 1; // บวก 1 เพื่อให้ตรงกับเลขแถวใน Sheet จริง (1-indexed)
+    if (data[i][0] === formData.id) {
+      rowIndex = i + 1;
       break;
     }
   }
@@ -241,8 +253,6 @@ function updateJob(formData) {
     throw new Error("ไม่พบ JobID ที่ต้องการแก้ไขในฐานข้อมูล");
   }
 
-  // อัปเดตข้อมูลลงไปในคอลัมน์ต่างๆ (ไม่อัปเดต JobID และ Timestamp เดิม)
-  // Col B(2)=Site, Col C(3)=Owner, Col D(4)=OwnerCompany, Col E(5)=Staff, Col F(6)=ReplyDueDate, Col G(7)=Remark
   sheet.getRange(rowIndex, 2).setValue(formData.site || '');
   sheet.getRange(rowIndex, 3).setValue(formData.owner || '');
   sheet.getRange(rowIndex, 4).setValue(formData.ownerCompany || '');
@@ -253,42 +263,38 @@ function updateJob(formData) {
   return "Update Success";
 }
 
-// ฟังก์ชันสำหรับดึงข้อมูล Master Data จาก Sheet 'Project' และ 'Owner'
 function getMasterData() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let result = { sites: [], owners: [] };
 
-  // 1. ดึงข้อมูล Site จาก Sheet 'Project' คอลัมน์ B (เริ่มแถวที่ 2)
   const projectSheet = ss.getSheetByName('Project');
   if (projectSheet) {
     const pLastRow = projectSheet.getLastRow();
     if (pLastRow >= 2) {
       const pData = projectSheet.getRange(2, 2, pLastRow - 1, 1).getDisplayValues();
       const sites = pData.map(r => r[0]).filter(s => s !== '');
-      result.sites = [...new Set(sites)]; // กรองเอาเฉพาะรายชื่อที่ไม่ซ้ำกัน
+      result.sites = [...new Set(sites)];
     }
   }
 
-  // 2. ดึงข้อมูล Owner จาก Sheet 'Owner' คอลัมน์ B, C, D
   const ownerSheet = ss.getSheetByName('Owner');
   if (ownerSheet) {
     const oLastRow = ownerSheet.getLastRow();
     if (oLastRow >= 2) {
-      // Index 0 = Col B, Index 1 = Col C, Index 2 = Col D
       const oData = ownerSheet.getRange(2, 2, oLastRow - 1, 3).getDisplayValues();
       result.owners = oData
-        .filter(row => row[2] !== '') // กรองแถวที่ 'ผู้ดูแล' (Col D) ไม่เป็นค่าว่าง
+        .filter(row => row[2] !== '') 
         .map(row => ({
-          ownerCompany: row[0], // ดึงข้อมูลจาก Col B: ชื่อบริษัท
-          site: row[1],         // ดึงข้อมูลจาก Col C: Site (ใช้สำหรับเชื่อมโยงกัน)
-          owner: row[2]         // ดึงข้อมูลจาก Col D: ผู้ดูแล (Owner)
+          ownerCompany: row[0], 
+          site: row[1],         
+          owner: row[2]         
         }));
     }
   }
 
   return JSON.stringify(result);
 }
-// ฟังก์ชันสำหรับลบใบงานหลัก (JOB)
+
 function deleteJob(jobId) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('JOB');
@@ -302,7 +308,6 @@ function deleteJob(jobId) {
   throw new Error("ไม่พบ JobID ที่ต้องการลบ");
 }
 
-// ฟังก์ชันสำหรับลบใบงานย่อย (TASK)
 function deleteTask(taskId) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('TASK');
@@ -316,7 +321,6 @@ function deleteTask(taskId) {
   throw new Error("ไม่พบ TaskID ที่ต้องการลบ");
 }
 
-// ฟังก์ชันสำหรับลบรายการ Defect
 function deleteDefect(defectId) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('DEFECT');
