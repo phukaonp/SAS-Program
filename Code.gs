@@ -219,3 +219,33 @@ function uploadDefectImages(defectId, imagesPayload) {
 
   return "Success";
 }
+// ฟังก์ชันสำหรับแก้ไขใบงานหลัก (JOB)
+function updateJob(formData) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('JOB');
+  const data = sheet.getDataRange().getValues();
+  
+  // หาบรรทัดที่มี JobID ตรงกัน (เริ่มหาจากแถวที่ 2 เพราะแถว 1 คือ Header)
+  let rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === formData.id) { // Col A (Index 0) คือ JobID
+      rowIndex = i + 1; // บวก 1 เพื่อให้ตรงกับเลขแถวใน Sheet จริง (1-indexed)
+      break;
+    }
+  }
+
+  if (rowIndex === -1) {
+    throw new Error("ไม่พบ JobID ที่ต้องการแก้ไขในฐานข้อมูล");
+  }
+
+  // อัปเดตข้อมูลลงไปในคอลัมน์ต่างๆ (ไม่อัปเดต JobID และ Timestamp เดิม)
+  // Col B(2)=Site, Col C(3)=Owner, Col D(4)=OwnerCompany, Col E(5)=Staff, Col F(6)=ReplyDueDate, Col G(7)=Remark
+  sheet.getRange(rowIndex, 2).setValue(formData.site || '');
+  sheet.getRange(rowIndex, 3).setValue(formData.owner || '');
+  sheet.getRange(rowIndex, 4).setValue(formData.ownerCompany || '');
+  sheet.getRange(rowIndex, 5).setValue(formData.staff || '');
+  sheet.getRange(rowIndex, 6).setValue(formData.replyDueDate || '');
+  sheet.getRange(rowIndex, 7).setValue(formData.remark || '');
+
+  return "Update Success";
+}
