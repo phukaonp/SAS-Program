@@ -15,8 +15,6 @@
     const { useState, useEffect } = React;
 
     // --- Mock Data Options ---
-    const SITES = ['Project A (Sukhumvit)', 'Project B (Sathorn)', 'Project C (Ari)'];
-    const OWNERS = ['บริษัท นิติบุคคล จำกัด', 'บริษัท บริหารอาคารไทย จำกัด'];
     const STAFFS = ['สมชาย ช่างซ่อม', 'สมหญิง แอดมิน', 'USER_CURRENT'];
     const MAIN_CATEGORIES = ['งานโครงสร้าง', 'งานสถาปัตย์', 'งานระบบไฟฟ้า', 'งานระบบประปา'];
     const SUB_CATEGORIES = {
@@ -35,6 +33,7 @@
     const IconSave = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
     const IconClipboard = () => <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 14h6"/><path d="M9 18h6"/><path d="M9 10h6"/></svg>;
     const IconSettings = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>;
+    const IconTrash = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
 
     // --- Component จัดการอัปโหลดรูป ---
     const DefectImagesUploader = ({ defect, onSuccess }) => {
@@ -110,8 +109,12 @@
     function App() {
       const [view, setView] = useState('JOB_LIST');
       const [jobs, setJobs] = useState([]);
+      const [ownerMaster, setOwnerMaster] = useState([]);
+      const [uniqueSites, setUniqueSites] = useState([]);
+      
       const [isLoading, setIsLoading] = useState(true);
       const [isSaving, setIsSaving] = useState(false);
+      const [isDeleting, setIsDeleting] = useState(false);
       
       const [activeJobId, setActiveJobId] = useState(null);
       const [activeTaskId, setActiveTaskId] = useState(null);
@@ -121,6 +124,59 @@
       const [showTaskForm, setShowTaskForm] = useState(false);
       const [showDefectForm, setShowDefectForm] = useState(false);
       const [editingJob, setEditingJob] = useState(null);
+
+      const activeJob = jobs.find(j => j.id === activeJobId);
+      const activeTask = activeJob?.tasks?.find(t => t.id === activeTaskId);
+      const activeDefect = activeTask?.defects?.find(d => d.id === activeDefectId);
+      
+      // โหลดข้อมูลจาก Google Sheets (Jobs)
+      const fetchData = () => {
+        setIsLoading(true);
+        google.script.run
+          .withSuccessHandler(data => {
+            setJobs(JSON.parse(data));
+            setIsLoading(false);
+          })
+          .withFailureHandler(err => {
+            console.error(err);
+            alert('เกิดข้อผิดพลาดในการโหลดข้อมูล');
+            setIsLoading(false);
+          })
+          .getAllData();
+      };
+
+      // โหลดข้อมูล Master Data สำหรับ Dropdowns
+      const fetchMasterData = () => {
+        google.script.run
+          .withSuccessHandler(data => {
+            const parsed = JSON.parse(data);
+            setOwnerMaster(parsed.owners); // รับข้อมูล Owner/Company จาก Sheet Owner
+            setUniqueSites(parsed.sites);  // รับข้อมูล Site จาก Sheet Project
+          })
+          .withFailureHandler(err => console.error('Error fetching master data:', err))
+          .getMasterData(); 
+      };
+
+      useEffect(() => {
+        fetchData();
+        fetchMasterData();
+      }, []);
+
+      // --- ฟังก์ชัน จัดการข้อมูล CRUD ---
+      const handleCreateJob = (formData) => {
+        setIsSaving(true);
+        google.script.run
+          .withSuccessHandler(newId => {
+            fetchData();
+            setShowJobForm(false);
+            setIsSaving(false);
+          })
+          .withFailureHandler(err => {
+            alert('เกิดข้อผิดพลาดในการสร้าง Job: ' + err.message);
+            setIsSaving(false);
+          })
+          .addJob(formData);
+      };
 
       const handleUpdateJob = (formData) => {
         setIsSaving(true);
@@ -138,44 +194,19 @@
           .updateJob(formData);
       };
 
-      const activeJob = jobs.find(j => j.id === activeJobId);
-      const activeTask = activeJob?.tasks?.find(t => t.id === activeTaskId);
-      const activeDefect = activeTask?.defects?.find(d => d.id === activeDefectId);
-      
-
-      // โหลดข้อมูลจาก Google Sheets
-      const fetchData = () => {
-        setIsLoading(true);
-        google.script.run
-          .withSuccessHandler(data => {
-            setJobs(JSON.parse(data));
-            setIsLoading(false);
-          })
-          .withFailureHandler(err => {
-            console.error(err);
-            alert('เกิดข้อผิดพลาดในการโหลดข้อมูล');
-            setIsLoading(false);
-          })
-          .getAllData();
-      };
-
-      useEffect(() => {
-        fetchData();
-      }, []);
-
-      const handleCreateJob = (formData) => {
-        setIsSaving(true);
-        google.script.run
-          .withSuccessHandler(newId => {
-            fetchData();
-            setShowJobForm(false);
-            setIsSaving(false);
-          })
-          .withFailureHandler(err => {
-            alert('เกิดข้อผิดพลาดในการสร้าง Job: ' + err.message);
-            setIsSaving(false);
-          })
-          .addJob(formData);
+      const handleDeleteJob = (id, e) => {
+        e.stopPropagation(); 
+        if (window.confirm(`⚠️ คุณต้องการลบใบงานหลัก ${id} ใช่หรือไม่?\nข้อมูล Task และ Defect ที่อยู่ภายใต้ใบงานนี้จะไม่แสดงอีกต่อไป`)) {
+          setIsDeleting(true);
+          google.script.run
+            .withSuccessHandler(() => {
+              fetchData();
+              setIsDeleting(false);
+              if (activeJobId === id) setView('JOB_LIST');
+            })
+            .withFailureHandler(err => { alert('เกิดข้อผิดพลาดในการลบ Job: ' + err.message); setIsDeleting(false); })
+            .deleteJob(id);
+        }
       };
 
       const handleCreateTask = (formData) => {
@@ -193,6 +224,21 @@
           .addTask(activeJobId, formData);
       };
 
+      const handleDeleteTask = (id, e) => {
+        e.stopPropagation();
+        if (window.confirm(`⚠️ คุณต้องการลบใบงานย่อย ${id} ใช่หรือไม่?`)) {
+          setIsDeleting(true);
+          google.script.run
+            .withSuccessHandler(() => {
+              fetchData();
+              setIsDeleting(false);
+              if (activeTaskId === id) setView('JOB_DETAIL');
+            })
+            .withFailureHandler(err => { alert('เกิดข้อผิดพลาดในการลบ Task: ' + err.message); setIsDeleting(false); })
+            .deleteTask(id);
+        }
+      };
+
       const handleCreateDefect = (formData) => {
         setIsSaving(true);
         google.script.run
@@ -208,16 +254,30 @@
           .addDefect(activeTaskId, formData);
       };
 
+      const handleDeleteDefect = (id, e) => {
+        e.stopPropagation();
+        if (window.confirm(`⚠️ คุณต้องการลบรายการ Defect ${id} ใช่หรือไม่?`)) {
+          setIsDeleting(true);
+          google.script.run
+            .withSuccessHandler(() => {
+              fetchData();
+              setIsDeleting(false);
+              if (activeDefectId === id) setView('TASK_DETAIL');
+            })
+            .withFailureHandler(err => { alert('เกิดข้อผิดพลาดในการลบ Defect: ' + err.message); setIsDeleting(false); })
+            .deleteDefect(id);
+        }
+      };
+
       // --- Modals ---
       const JobModal = () => {
         const isEditMode = !!editingJob;
 
-        // ฟังก์ชันช่วยแปลงวันที่จาก Google Sheets ให้อยู่ในฟอร์แมต YYYY-MM-DD สำหรับ input type="date"
         const formatDateForInput = (dateString) => {
           if (!dateString) return '';
           try {
             const d = new Date(dateString);
-            if (isNaN(d.getTime())) return dateString; // ถ้ารูปแบบไม่ใช่วันที่ ให้คืนค่าเดิม
+            if (isNaN(d.getTime())) return dateString;
             const year = d.getFullYear();
             const month = String(d.getMonth() + 1).padStart(2, '0');
             const day = String(d.getDate()).padStart(2, '0');
@@ -227,32 +287,69 @@
           }
         };
 
-        // กำหนดค่าเริ่มต้น ดึงข้อมูลเก่ามาแสดงถ้าเป็นการแก้ไข
         const [formData, setFormData] = useState({ 
           id: editingJob ? editingJob.id : '',
-          site: editingJob ? editingJob.site : SITES[0], 
-          owner: editingJob ? editingJob.owner : OWNERS[0], 
+          site: editingJob ? editingJob.site : (uniqueSites[0] || ''), 
+          owner: editingJob ? editingJob.owner : '', 
           ownerCompany: editingJob ? editingJob.ownerCompany : '', 
           staff: editingJob ? editingJob.staff : STAFFS[2], 
           replyDueDate: editingJob ? formatDateForInput(editingJob.replyDueDate) : '', 
           remark: editingJob ? editingJob.remark : '' 
         });
 
-        const handleClose = () => {
-          setShowJobForm(false);
-          setEditingJob(null); // เคลียร์สถานะการแก้ไขเมื่อปิดฟอร์ม
+        useEffect(() => {
+          if (!isEditMode && uniqueSites.length > 0 && formData.site === uniqueSites[0] && formData.owner === '') {
+            const defaultOwners = ownerMaster.filter(m => m.site === uniqueSites[0]);
+            if (defaultOwners.length > 0) {
+              setFormData(prev => ({
+                ...prev,
+                owner: defaultOwners[0].owner,
+                ownerCompany: defaultOwners[0].ownerCompany
+              }));
+            }
+          }
+        }, [uniqueSites, ownerMaster, isEditMode]);
+
+        const availableOwners = ownerMaster.filter(m => m.site === formData.site);
+        const uniqueOwnersList = [...new Set(availableOwners.map(m => m.owner))];
+
+        const handleSiteChange = (e) => {
+          const newSite = e.target.value;
+          const filtered = ownerMaster.filter(m => m.site === newSite);
+          const defaultOwner = filtered.length > 0 ? filtered[0].owner : '';
+          const defaultCompany = filtered.length > 0 ? filtered[0].ownerCompany : '';
+          
+          setFormData({
+            ...formData, 
+            site: newSite,
+            owner: defaultOwner,
+            ownerCompany: defaultCompany
+          });
         };
 
-        // ฟังก์ชันจัดการตอนกดบันทึก
+        const handleOwnerChange = (e) => {
+          const newOwner = e.target.value;
+          const matched = ownerMaster.find(m => m.site === formData.site && m.owner === newOwner);
+          
+          setFormData({
+            ...formData, 
+            owner: newOwner,
+            ownerCompany: matched ? matched.ownerCompany : ''
+          });
+        };
+
+        const handleClose = () => {
+          setShowJobForm(false);
+          setEditingJob(null);
+        };
+
         const handleSubmit = () => {
           if (isEditMode) {
-            // ถัาเป็นการแก้ไข ให้ถามยืนยันก่อน
             const isConfirmed = window.confirm('คุณยืนยันที่จะบันทึกการแก้ไขข้อมูลนี้ใช่หรือไม่?');
             if (isConfirmed) {
               handleUpdateJob(formData);
             }
           } else {
-            // ถ้าเป็นการสร้างใหม่ ให้บันทึกได้เลย
             handleCreateJob(formData);
           }
         };
@@ -267,19 +364,19 @@
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Site *</label>
-                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.site} onChange={e => setFormData({...formData, site: e.target.value})}>
-                    {SITES.map(s => <option key={s}>{s}</option>)}
+                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.site} onChange={handleSiteChange}>
+                    {uniqueSites.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">ผู้ดูแล (Owner) *</label>
-                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.owner} onChange={e => setFormData({...formData, owner: e.target.value})}>
-                    {OWNERS.map(o => <option key={o}>{o}</option>)}
+                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.owner} onChange={handleOwnerChange}>
+                    {uniqueOwnersList.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">ชื่อบริษัทผู้ดูแล</label>
-                  <input type="text" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.ownerCompany} onChange={e => setFormData({...formData, ownerCompany: e.target.value})} />
+                  <input type="text" className="mt-1 block w-full rounded-md border border-gray-300 p-2 bg-gray-100 text-gray-600" value={formData.ownerCompany} readOnly placeholder="ดึงข้อมูลอัตโนมัติ" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">ชื่อ Staff *</label>
@@ -364,7 +461,7 @@
           mainCategory: MAIN_CATEGORIES[0], 
           subCategory: SUB_CATEGORIES[MAIN_CATEGORIES[0]][0], 
           description: '', 
-          major: 'ไม่ใช่', // เพิ่มฟิลด์ Major Default
+          major: 'ไม่ใช่',
           team: TEAMS[0], 
           targetStartDate: '', 
           targetEndDate: '', 
@@ -456,7 +553,6 @@
               <div className="space-y-4">
                 <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm">
                   <h1 className="text-2xl font-bold text-gray-800">ภาพรวมใบงานหลัก (Jobs)</h1>
-                  {/* รีเซ็ต setEditingJob(null) เมื่อสร้างใหม่ */}
                   <button onClick={() => { setEditingJob(null); setShowJobForm(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
                     <span className="mr-1"><IconPlus /></span> สร้างใบงานหลัก
                   </button>
@@ -469,7 +565,6 @@
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Site</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Tasks</th>
-                    {/* เพิ่ม th เปล่าๆ สำหรับคอลัมน์ตั้งค่า */}
                     <th className="px-6 py-3"></th>
                   </tr>
                 </thead>
@@ -488,18 +583,16 @@
                           {job.tasks ? job.tasks.length : 0}
                         </span>
                       </td>
-                      {/* เพิ่มปุ่มเฟืองตั้งค่า */}
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right space-x-2">
                         <button 
-                          onClick={(e) => {
-                            e.stopPropagation(); // สำคัญมาก: ป้องกันไม่ให้คลิกปุ่มแล้วกลายเป็นการเปิดเข้าไปใน Job
-                            setEditingJob(job);
-                            setShowJobForm(true);
-                          }} 
-                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors"
-                          title="ตั้งค่า/แก้ไข"
-                        >
+                          onClick={(e) => { e.stopPropagation(); setEditingJob(job); setShowJobForm(true); }} 
+                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors" title="ตั้งค่า/แก้ไข">
                           <IconSettings />
+                        </button>
+                        <button 
+                          onClick={(e) => handleDeleteJob(job.id, e)} 
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-full transition-colors" title="ลบใบงานหลัก">
+                          <IconTrash />
                         </button>
                       </td>
                     </tr>
@@ -518,25 +611,34 @@
                   <span className="mx-2"><IconChevronRight /></span>
                   <span className="font-semibold text-gray-800">{activeJob?.id}</span>
                 </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm border-t-4 border-blue-600 flex justify-between">
+
+                <div className="bg-white p-6 rounded-lg shadow-sm border-t-4 border-blue-600 flex justify-between items-center">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-800">Job: {activeJob?.id}</h2>
                     <p className="text-gray-600">{activeJob?.site} | Owner: {activeJob?.ownerCompany}</p>
                   </div>
-                  <button onClick={() => setShowTaskForm(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
+                  <button onClick={() => setShowTaskForm(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center h-10">
                     <span className="mr-1"><IconPlus /></span> สร้างใบงานย่อย (Task)
                   </button>
                 </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                   {activeJob?.tasks?.map(task => (
                     <div key={task.id} className="bg-white rounded-lg shadow-sm p-5 border hover:shadow-md relative overflow-hidden">
                       <div className={`absolute top-0 left-0 w-1 h-full ${task.scope === 'SAS' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
+                      
                       <div className="flex justify-between items-center mb-3">
-                        <span className="font-bold text-lg">{task.id}</span>
-                        <span className={`px-2 py-1 text-xs font-bold rounded-full ${task.scope === 'SAS' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
-                          {task.scope}
-                        </span>
+                         <span className="font-bold text-lg">{task.id}</span>
+                         <div className="flex items-center gap-2">
+                           <span className={`px-2 py-1 text-xs font-bold rounded-full ${task.scope === 'SAS' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                             {task.scope}
+                           </span>
+                           <button onClick={(e) => handleDeleteTask(task.id, e)} className="text-gray-400 hover:text-red-600 p-1 rounded-full hover:bg-red-50 transition-colors" title="ลบใบงานย่อย">
+                             <IconTrash />
+                           </button>
+                         </div>
                       </div>
+
                       <p className="text-sm text-gray-600">ยูนิต: {task.building} - {task.unit}</p>
                       <p className="text-sm text-gray-600 mb-4">Defects: {task.defects?.length || 0} รายการ</p>
                       <button onClick={() => { setActiveTaskId(task.id); setView('TASK_DETAIL'); }} className="w-full py-2 bg-gray-50 hover:bg-gray-100 border rounded-md text-sm font-medium">จัดการ Defect</button>
@@ -572,6 +674,7 @@
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">หมวดหมู่</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">รายละเอียด</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">สถานะ</th>
+                        <th className="px-6 py-3"></th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -587,10 +690,15 @@
                              <span className="px-2 py-1 bg-gray-100 rounded-full text-xs font-bold">{defect.status}</span>
                              {defect.major === 'ใช่' && <span className="px-2 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">Major</span>}
                           </td>
+                          <td className="px-6 py-4 text-right">
+                            <button onClick={(e) => handleDeleteDefect(defect.id, e)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-full transition-colors" title="ลบรายการ Defect">
+                              <IconTrash />
+                            </button>   
+                          </td>
                         </tr>
                       ))}
                       {(!activeTask?.defects || activeTask?.defects.length === 0) && (
-                        <tr><td colSpan="4" className="px-6 py-10 text-center text-gray-500">ไม่มีรายการ Defect</td></tr>
+                        <tr><td colSpan="5" className="px-6 py-10 text-center text-gray-500">ไม่มีรายการ Defect</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -626,6 +734,15 @@
             )}
 
           </main>
+
+          {isDeleting && (
+            <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[100]">
+              <div className="bg-white px-6 py-4 rounded-lg shadow-lg font-bold text-red-600 flex items-center gap-3">
+                <svg className="animate-spin h-5 w-5 text-red-600" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg>
+                กำลังลบข้อมูล...
+              </div>
+            </div>
+          )}
 
           {showJobForm && <JobModal />}
           {showTaskForm && <TaskModal />}
