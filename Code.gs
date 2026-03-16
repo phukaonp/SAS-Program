@@ -127,9 +127,24 @@ function addTask(jobId, formData) {
   // สร้าง Task ID ใหม่
   const newId = 'TSK-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
   
-  // จัดรูปแบบวัน-เวลาสำหรับบันทึกประวัติ (Column K) เช่น 15/3/2026, 16:05:29
+  // จัดรูปแบบวัน-เวลาสำหรับบันทึกประวัติ (Column K)
   const historyLog = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy, HH:mm:ss');
   
+  // คำนวณ Duration (Col I) = กำหนดวันเข้าแก้ไข (Col H) + 14 วัน
+  let durationDate = '';
+  if (formData.targetFixDate) {
+    // แยกวันที่ ปี-เดือน-วัน เพื่อป้องกันปัญหา Timezone คลาดเคลื่อน
+    const parts = formData.targetFixDate.split('-'); 
+    if (parts.length === 3) {
+      // สร้าง Date Object และบวกเพิ่ม 14 วัน
+      const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+      dateObj.setDate(dateObj.getDate() + 14);
+      
+      // จัดฟอร์แมตวันที่ (คุณสามารถเปลี่ยน 'yyyy-MM-dd' เป็น 'dd/MM/yyyy' ได้ตามต้องการ)
+      durationDate = Utilities.formatDate(dateObj, Session.getScriptTimeZone(), 'yyyy-MM-dd'); 
+    }
+  }
+
   // เพิ่มข้อมูลลงใน Sheet โดยเรียงลำดับให้ตรงกับ Column A - K
   sheet.appendRow([
     newId,                        // Col A: TaskID
@@ -140,7 +155,7 @@ function addTask(jobId, formData) {
     'รอดำเนินการ',                  // Col F: TaskStatus
     formData.customerName || '',  // Col G: ชื่อลูกค้า
     formData.targetFixDate || '', // Col H: กำหนดวันเข้าแก้ไข
-    '',                           // Col I: Duration (เว้นว่างไว้ก่อน)
+    durationDate,                 // Col I: Duration (วันที่เข้าแก้ไข + 14 วัน)
     formData.remark || '',        // Col J: รายละเอียด
     historyLog                    // Col K: ประวัติ (เวลาที่สร้าง Task)
   ]);
