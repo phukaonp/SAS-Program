@@ -1,4 +1,5 @@
-const SPREADSHEET_ID = '1BkhC_02odW8OINve6c3Ec4QI4cr_DEQvFGCVWrgebfg'; // ตรวจสอบให้แน่ใจว่าใส่ ID Sheet ถูกต้อง
+const SPREADSHEET_ID = '1BkhC_02odW8OINve6c3Ec4QI4cr_DEQvFGCVWrgebfg';
+const IMAGE_FOLDER_ID = '1pD5dfsyjrtoy7k3IUGaCGPMo6-SiCJPO'; // <--- เพิ่มบรรทัดนี้
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
@@ -166,7 +167,8 @@ function addDefect(taskId, defectData) {
       const contentType = splitBase[0].split(';')[0].replace('data:', '');
       const byteCharacters = Utilities.base64Decode(splitBase[1]);
       const blob = Utilities.newBlob(byteCharacters, contentType, filename);
-      const file = DriveApp.createFile(blob);
+      const folder = DriveApp.getFolderById(IMAGE_FOLDER_ID);
+      const file = folder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       return file.getUrl();
     } catch (e) {
@@ -200,6 +202,7 @@ function addDefect(taskId, defectData) {
   return newId;
 }
 
+// ยังคงเก็บฟังก์ชันเดิมไว้เผื่อกรณีต้องการใช้ (ไม่กระทบการทำงานใหม่)
 function uploadDefectImages(defectId, imagesPayload) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('DEFECT');
@@ -386,4 +389,66 @@ function updateTaskStatusAndJob(taskId, newStatus) {
     return "Success";
   }
   throw new Error("ไม่พบข้อมูลใบงานย่อยที่ต้องการเปลี่ยนสถานะ");
+}
+
+// --- ฟังก์ชันอัปโหลดรูปภาพทีละรูป (NEW) ---
+function uploadSingleDefectImage(defectId, field, base64Str) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('DEFECT');
+  const data = sheet.getDataRange().getValues();
+  
+  let rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === defectId) {
+      rowIndex = i + 1;
+      break;
+    }
+  }
+  if (rowIndex === -1) throw new Error("Defect not found");
+
+  if (!base64Str) return '';
+  if (base64Str.startsWith('http')) return base64Str; 
+
+  try {
+    const splitBase = base64Str.split(',');
+    const contentType = splitBase[0].split(';')[0].replace('data:', '');
+    const byteCharacters = Utilities.base64Decode(splitBase[1]);
+    
+    const ts = new Date().getTime();
+    const filename = `${field}_${defectId}_${ts}`;
+    const blob = Utilities.newBlob(byteCharacters, contentType, filename);
+    
+    // --- ส่วนที่แก้ไข: เล็งเป้าหมายไปที่โฟลเดอร์ ---
+    const folder = DriveApp.getFolderById(IMAGE_FOLDER_ID);
+    const file = folder.createFile(blob);
+    // ----------------------------------------
+    
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    const url = file.getUrl();
+    
+    const colMap = { 'imgUnit': 11, 'imgBefore': 12, 'imgDuring': 13, 'imgAfter': 14 };
+    if (colMap[field]) {
+      sheet.getRange(rowIndex, colMap[field]).setValue(url);
+    }
+    return url;
+  } catch (e) {
+    throw new Error('Upload failed: ' + e.toString());
+  }
+}
+
+// --- ฟังก์ชันอัปเดตสถานะ Defect (NEW) ---
+function updateDefectStatus(defectId, status) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('DEFECT');
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === defectId) {
+      // คอลัมน์ Status ของ DEFECT อยู่ที่คอลัมน์ E (ตำแหน่งที่ 5)
+      sheet.getRange(i + 1, 5).setValue(status);
+      return "Success";
+    }
+  }
+  throw new Error("ไม่พบข้อมูล DefectID ที่ต้องการเปลี่ยนสถานะ");
 }
