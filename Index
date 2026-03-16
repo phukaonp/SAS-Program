@@ -597,16 +597,17 @@
                   </button>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm overflow-hidden overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
+                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
-                    <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Site</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Tasks</th>
-                    <th className="px-6 py-3"></th>
-                  </tr>
-                </thead>
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job ID</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Site</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">สถานะ</th> {/* เพิ่มหัวตารางตรงนี้ */}
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Tasks</th>
+                        <th className="px-6 py-3"></th>
+                      </tr>
+                    </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {jobs.map((job) => (
                     <tr 
@@ -617,6 +618,14 @@
                       <td className="px-6 py-4 font-medium text-blue-600">{job.id}</td>
                       <td className="px-6 py-4 text-sm">{job.site}</td>
                       <td className="px-6 py-4 text-sm">{job.ownerCompany || job.owner}</td>
+                          
+                      {/* เพิ่มคอลัมน์สถานะตรงนี้ */}
+                      <td className="px-6 py-4 text-center">
+                        <span className="px-2.5 py-1 text-[11px] font-medium rounded-md border bg-amber-50 text-amber-700 border-amber-200">
+                          {job.status}
+                        </span>
+                      </td>
+
                       <td className="px-6 py-4 text-sm text-center">
                         <span className="bg-gray-100 px-3 py-1 rounded-full font-bold text-xs">
                           {job.tasks ? job.tasks.length : 0}
