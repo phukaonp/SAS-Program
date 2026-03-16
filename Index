@@ -35,8 +35,8 @@
     const IconSettings = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>;
     const IconTrash = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
 
-    // --- Component จัดการอัปโหลดรูป ---
-    const DefectImagesUploader = ({ defect, onSuccess }) => {
+    // --- Component จัดการอัปโหลดรูป (Phase 2) ---
+    const DefectImagesUploader = ({ defect, taskStatus, onSuccess }) => {
       const [images, setImages] = useState({
         imgUnit: defect.imgUnit || '',
         imgBefore: defect.imgBefore || '',
@@ -44,6 +44,9 @@
         imgAfter: defect.imgAfter || ''
       });
       const [isUploading, setIsUploading] = useState(false);
+
+      const isTaskActive = taskStatus === 'Active';
+      const isTaskRejected = taskStatus === 'Reject';
 
       const handleFileChange = (field, e) => {
         const file = e.target.files[0];
@@ -71,34 +74,41 @@
           .uploadDefectImages(defect.id, images);
       };
 
-      const ImageBox = ({ label, field }) => (
-        <div className="border rounded-lg p-4 flex flex-col items-center justify-center bg-gray-50">
-          <h4 className="font-semibold text-gray-700 mb-2 text-sm">{label}</h4>
-          {images[field] ? (
-            <img src={images[field]} alt={label} className="h-32 object-contain mb-3 rounded border bg-white" />
-          ) : (
-            <div className="h-32 flex items-center justify-center text-gray-400 mb-3 border-2 border-dashed border-gray-300 w-full rounded text-xs">
-              ไม่มีรูปภาพ
-            </div>
-          )}
-          <input type="file" accept="image/*" onChange={(e) => handleFileChange(field, e)} className="text-xs w-full" />
-        </div>
-      );
+      const ImageBox = ({ label, field, disabledReason }) => {
+        const isDisabled = !!disabledReason;
+        return (
+          <div className={`border rounded-lg p-4 flex flex-col items-center justify-center ${isDisabled ? 'bg-gray-100' : 'bg-gray-50'}`}>
+            <h4 className="font-semibold text-gray-700 mb-2 text-sm text-center">{label}</h4>
+            {images[field] ? (
+              <img src={images[field]} alt={label} className={`h-32 object-contain mb-3 rounded border bg-white ${isDisabled ? 'opacity-50' : ''}`} />
+            ) : (
+              <div className={`h-32 flex items-center justify-center mb-3 border-2 border-dashed w-full rounded text-xs text-center px-2 ${isDisabled ? 'text-gray-400 border-gray-200' : 'text-gray-400 border-gray-300'}`}>
+                {isDisabled ? disabledReason : 'ไม่มีรูปภาพ'}
+              </div>
+            )}
+            <input type="file" accept="image/*" onChange={(e) => handleFileChange(field, e)} disabled={isDisabled || isTaskRejected} className="text-xs w-full disabled:opacity-50 cursor-pointer" />
+          </div>
+        );
+      };
 
       return (
         <div className="bg-white p-6 rounded-lg shadow-sm">
-          <h3 className="text-xl font-bold text-gray-800 mb-4">อัปโหลดรูปภาพ (4 รูป)</h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl font-bold text-gray-800">อัปโหลดรูปภาพ (4 รูป)</h3>
+            {!isTaskActive && !isTaskRejected && <span className="text-sm text-amber-600 font-medium">⚠️ กดเปิดใบงาน (Active) เพื่ออัปโหลดรูปภาพ 1, 3 และ 4</span>}
+            {isTaskRejected && <span className="text-sm text-red-600 font-medium">⚠️ ใบงานถูก Reject ไม่สามารถอัปโหลดภาพได้</span>}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <ImageBox label="1. รูปภาพเลขยูนิต" field="imgUnit" />
-            <ImageBox label="2. รูปภาพก่อนแก้ไข" field="imgBefore" />
-            <ImageBox label="3. รูปภาพระหว่างแก้ไข" field="imgDuring" />
-            <ImageBox label="4. รูปภาพหลังแก้ไข" field="imgAfter" />
+            <ImageBox label="1. รูปภาพเลขยูนิต" field="imgUnit" disabledReason={!isTaskActive && !images['imgUnit'] ? "เปิดใบงานก่อน" : null} />
+            <ImageBox label="2. รูปภาพก่อนแก้ไข" field="imgBefore" disabledReason={isTaskRejected ? "ไม่อนุญาต" : null} />
+            <ImageBox label="3. รูปภาพระหว่างแก้ไข" field="imgDuring" disabledReason={!isTaskActive && !images['imgDuring'] ? "เปิดใบงานก่อน" : null} />
+            <ImageBox label="4. รูปภาพหลังแก้ไข" field="imgAfter" disabledReason={!isTaskActive && !images['imgAfter'] ? "เปิดใบงานก่อน" : null} />
           </div>
           <div className="mt-6 flex justify-end">
             <button 
               onClick={handleSaveImages} 
-              disabled={isUploading} 
-              className={`px-6 py-2 text-white rounded-md flex items-center ${isUploading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}>
+              disabled={isUploading || isTaskRejected} 
+              className={`px-6 py-2 text-white rounded-md flex items-center ${(isUploading || isTaskRejected) ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}>
               {isUploading ? 'กำลังอัปโหลด...' : <><span className="mr-2"><IconSave/></span> บันทึกรูปภาพทั้งหมด</>}
             </button>
           </div>
@@ -119,12 +129,10 @@
       const [activeJobId, setActiveJobId] = useState(null);
       const [activeTaskId, setActiveTaskId] = useState(null);
       const [activeDefectId, setActiveDefectId] = useState(null);
-
       const [showJobForm, setShowJobForm] = useState(false);
       const [showTaskForm, setShowTaskForm] = useState(false);
       const [showDefectForm, setShowDefectForm] = useState(false);
       const [editingJob, setEditingJob] = useState(null);
-
       const activeJob = jobs.find(j => j.id === activeJobId);
       const activeTask = activeJob?.tasks?.find(t => t.id === activeTaskId);
       const activeDefect = activeTask?.defects?.find(d => d.id === activeDefectId);
@@ -143,7 +151,7 @@
           })
           .getAllData();
       };
-
+      
       const fetchMasterData = () => {
         google.script.run
           .withSuccessHandler(data => {
@@ -159,7 +167,7 @@
         fetchData();
         fetchMasterData();
       }, []);
-
+      
       // --- ฟังก์ชัน จัดการข้อมูล CRUD ---
       const handleCreateJob = (formData) => {
         setIsSaving(true);
@@ -175,7 +183,7 @@
           })
           .addJob(formData);
       };
-
+      
       const handleUpdateJob = (formData) => {
         setIsSaving(true);
         google.script.run
@@ -193,7 +201,7 @@
       };
 
       const handleDeleteJob = (id, e) => {
-        e.stopPropagation(); 
+        e.stopPropagation();
         if (window.confirm(`⚠️ คุณต้องการลบใบงานหลัก ${id} ใช่หรือไม่?\nข้อมูล Task และ Defect ที่อยู่ภายใต้ใบงานนี้จะไม่แสดงอีกต่อไป`)) {
           setIsDeleting(true);
           google.script.run
@@ -206,7 +214,7 @@
             .deleteJob(id);
         }
       };
-
+      
       const handleCreateTask = (formData) => {
         setIsSaving(true);
         google.script.run
@@ -236,7 +244,7 @@
             .deleteTask(id);
         }
       };
-
+      
       const handleCreateDefect = (formData) => {
         setIsSaving(true);
         google.script.run
@@ -267,10 +275,26 @@
         }
       };
 
+      // Phase 2: ฟังก์ชันเปลี่ยนสถานะ Task (เปิดใบงาน / Reject)
+      const handleUpdateTaskStatus = (id, status) => {
+        if (window.confirm(`⚠️ คุณต้องการเปลี่ยนสถานะใบงานย่อยเป็น "${status}" ใช่หรือไม่?`)) {
+          setIsSaving(true);
+          google.script.run
+            .withSuccessHandler(() => {
+              fetchData();
+              setIsSaving(false);
+            })
+            .withFailureHandler(err => { 
+              alert('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ' + err.message); 
+              setIsSaving(false); 
+            })
+            .updateTaskStatusAndJob(id, status);
+        }
+      };
+
       // --- Modals ---
       const JobModal = () => {
         const isEditMode = !!editingJob;
-
         const formatDateForInput = (dateString) => {
           if (!dateString) return '';
           try {
@@ -294,7 +318,7 @@
           replyDueDate: editingJob ? formatDateForInput(editingJob.replyDueDate) : '', 
           remark: editingJob ? editingJob.remark : '' 
         });
-
+        
         useEffect(() => {
           if (!isEditMode && uniqueSites.length > 0 && formData.site === uniqueSites[0] && formData.owner === '') {
             const defaultOwners = ownerMaster.filter(m => m.site === uniqueSites[0]);
@@ -307,16 +331,15 @@
             }
           }
         }, [uniqueSites, ownerMaster, isEditMode]);
-
+        
         const availableOwners = ownerMaster.filter(m => m.site === formData.site);
         const uniqueOwnersList = [...new Set(availableOwners.map(m => m.owner))];
-
+        
         const handleSiteChange = (e) => {
           const newSite = e.target.value;
           const filtered = ownerMaster.filter(m => m.site === newSite);
           const defaultOwner = filtered.length > 0 ? filtered[0].owner : '';
           const defaultCompany = filtered.length > 0 ? filtered[0].ownerCompany : '';
-          
           setFormData({
             ...formData, 
             site: newSite,
@@ -328,7 +351,6 @@
         const handleOwnerChange = (e) => {
           const newOwner = e.target.value;
           const matched = ownerMaster.find(m => m.site === formData.site && m.owner === newOwner);
-          
           setFormData({
             ...formData, 
             owner: newOwner,
@@ -340,7 +362,7 @@
           setShowJobForm(false);
           setEditingJob(null);
         };
-
+        
         const handleSubmit = () => {
           if (isEditMode) {
             const isConfirmed = window.confirm('คุณยืนยันที่จะบันทึกการแก้ไขข้อมูลนี้ใช่หรือไม่?');
@@ -441,7 +463,7 @@
                   <label className="block text-sm font-medium text-gray-700">กำหนดวันเข้าแก้ไข *</label>
                   <input type="date" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.targetFixDate} onChange={e => setFormData({...formData, targetFixDate: e.target.value})} />
                 </div>
-              </div>
+               </div>
               <div className="mt-6 flex justify-end gap-3">
                 <button onClick={() => setShowTaskForm(false)} className="px-4 py-2 border rounded-md text-gray-600 hover:bg-gray-50">ยกเลิก</button>
                 <button onClick={() => handleCreateTask(formData)} disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
@@ -467,7 +489,7 @@
           remark: '',
           imgBefore: '' // สำหรับเก็บรูปภาพก่อนแก้ไข
         });
-
+        
         const handleMainCatChange = (e) => {
           const main = e.target.value;
           setFormData({...formData, mainCategory: main, subCategory: SUB_CATEGORIES[main][0] || ''});
@@ -480,7 +502,7 @@
           }
           handleCreateDefect(formData);
         };
-
+        
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-10">
             <div className="bg-white rounded-lg w-full max-w-3xl p-6 shadow-xl my-auto">
@@ -519,7 +541,7 @@
 
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700">รายละเอียด Defect <span className="text-red-500">*</span></label>
-                  <textarea className="mt-1 block w-full rounded-md border border-gray-300 p-2" rows="2" 
+                   <textarea className="mt-1 block w-full rounded-md border border-gray-300 p-2" rows="2" 
                     value={formData.description} 
                     onChange={e => setFormData({...formData, description: e.target.value})} 
                     placeholder="จำเป็นต้องกรอกรายละเอียดปัญหา..."></textarea>
@@ -536,7 +558,7 @@
                       </div>
                     ) : (
                       <div className="h-24 w-24 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 rounded bg-white text-xs">
-                        ไม่มีรูปภาพ
+                         ไม่มีรูปภาพ
                       </div>
                     )}
                     <input type="file" accept="image/*" onChange={(e) => {
@@ -582,7 +604,7 @@
             <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
               <div className="flex items-center cursor-pointer" onClick={() => setView('JOB_LIST')}>
                 <IconClipboard />
-                <span className="ml-3 font-bold text-xl">SAS Defect Management</span>
+                 <span className="ml-3 font-bold text-xl">SAS Defect Management</span>
               </div>
             </div>
           </nav>
@@ -617,48 +639,33 @@
                           className="hover:bg-blue-50 cursor-pointer transition-colors" 
                           onClick={() => { setActiveJobId(job.id); setView('JOB_DETAIL'); }}
                         >
-                          {/* คอลัมน์ที่ 1: JOB ID และ วันตอบกลับ Owner */}
                           <td className="px-6 py-4">
                             <div className="font-medium text-blue-600">{job.id}</div>
                             {job.replyDueDate && (
                               <div className="text-xs text-gray-500 mt-1">Due: {job.replyDueDate}</div>
                             )}
                           </td>
-
-                          {/* คอลัมน์ที่ 2: Site */}
                           <td className="px-6 py-4 text-sm text-gray-900">{job.site}</td>
-
-                          {/* คอลัมน์ที่ 3: ผู้ดูแล (Owner) และ ชื่อบริษัทผู้ดูแล */}
                           <td className="px-6 py-4">
                             <div className="text-sm font-medium text-gray-900">{job.owner || '-'}</div>
                             {job.ownerCompany && (
                               <div className="text-xs text-gray-500 mt-1">{job.ownerCompany}</div>
                             )}
                           </td>
-
-                          {/* คอลัมน์ที่ 4: ชื่อ Staff */}
                           <td className="px-6 py-4 text-sm text-gray-900">{job.staff || '-'}</td>
-
-                          {/* คอลัมน์ที่ 5: สถานะ */}
                           <td className="px-6 py-4 text-center">
-                            <span className="px-2.5 py-1 text-[11px] font-medium rounded-md border bg-amber-50 text-amber-700 border-amber-200">
-                              {job.status}
+                            <span className={`px-2.5 py-1 text-[11px] font-medium rounded-md border ${job.status === 'Active' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                               {job.status || 'รอดำเนินการ'}
                             </span>
                           </td>
-
-                          {/* คอลัมน์ที่ 6: Tasks */}
                           <td className="px-6 py-4 text-sm text-center">
                             <span className="bg-gray-100 px-3 py-1 rounded-full font-bold text-xs">
                               {job.tasks ? job.tasks.length : 0}
                             </span>
                           </td>
-
-                          {/* คอลัมน์ที่ 7: หมายเหตุ */}
                           <td className="px-6 py-4 text-sm text-gray-500 max-w-[150px] truncate" title={job.remark}>
                             {job.remark || '-'}
                           </td>
-
-                          {/* คอลัมน์ที่ 8: ปุ่มจัดการ */}
                           <td className="px-6 py-4 text-right space-x-2">
                             <button 
                               onClick={(e) => { e.stopPropagation(); setEditingJob(job); setShowJobForm(true); }} 
@@ -668,7 +675,7 @@
                             <button 
                               onClick={(e) => handleDeleteJob(job.id, e)} 
                               className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-full transition-colors" title="ลบใบงานหลัก">
-                              <IconTrash />
+                               <IconTrash />
                             </button>
                           </td>
                         </tr>
@@ -676,9 +683,9 @@
                       {jobs.length === 0 && <tr><td colSpan="8" className="px-6 py-10 text-center text-gray-500">ไม่มีข้อมูลใบงานหลัก</td></tr>}
                     </tbody>
                   </table>
-                              </div>
-                            </div>
-                          )}
+                </div>
+              </div>
+            )}
 
             {view === 'JOB_DETAIL' && (
               <div className="space-y-4">
@@ -701,10 +708,8 @@
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                   {activeJob?.tasks?.map(task => (
                     <div key={task.id} className="bg-white rounded-lg shadow-sm p-5 border hover:shadow-md relative overflow-hidden">
-                      {/* แถบสีด้านซ้ายบอก Scope */}
                       <div className={`absolute top-0 left-0 w-1 h-full ${task.scope === 'SAS' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
                       
-                      {/* ส่วนหัว: Task ID + Badge Scope + ปุ่มลบ */}
                       <div className="flex justify-between items-center mb-3">
                         <span className="font-bold text-lg">{task.id}</span>
                         <div className="flex items-center gap-2">
@@ -712,29 +717,27 @@
                             {task.scope}
                           </span>
                           <button onClick={(e) => handleDeleteTask(task.id, e)} className="text-gray-400 hover:text-red-600 p-1 rounded-full hover:bg-red-50 transition-colors" title="ลบใบงานย่อย">
-                            <IconTrash />
+                             <IconTrash />
                           </button>
                         </div>
                       </div>
 
-                      {/* ส่วนข้อมูล: ยูนิต, จำนวน Defect และ สถานะ (ใหม่) */}
                       <div className="mb-4">
                         <p className="text-sm text-gray-600 mb-2">ยูนิต: {task.building} - {task.unit}</p>
                         <div className="flex justify-between items-center">
                           <p className="text-sm text-gray-600">Defects: {task.defects?.length || 0} รายการ</p>
-                          
-                          {/* ป้ายแสดงสถานะ (Status Badge) ปรับเปลี่ยนสีตามข้อความสถานะ */}
                           <span className={`px-2.5 py-1 text-[11px] font-medium rounded-md border ${
                             task.status === 'รอดำเนินการ' ? 'bg-amber-50 text-amber-700 border-amber-200' : 
-                            task.status === 'เสร็จสิ้น' ? 'bg-green-50 text-green-700 border-green-200' :
-                            'bg-blue-50 text-blue-700 border-blue-200'
+                            task.status === 'Active' ? 'bg-green-50 text-green-700 border-green-200' :
+                            task.status === 'เสร็จสิ้น' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            task.status === 'Reject' ? 'bg-red-50 text-red-700 border-red-200' :
+                            'bg-gray-50 text-gray-700 border-gray-200'
                           }`}>
                             {task.status || 'รอดำเนินการ'}
                           </span>
                         </div>
                       </div>
   
-                      {/* ปุ่มจัดการ */}
                       <button onClick={() => { setActiveTaskId(task.id); setView('TASK_DETAIL'); }} className="w-full py-2 bg-gray-50 hover:bg-gray-100 border rounded-md text-sm font-medium transition-colors">
                         จัดการ Defect
                       </button>
@@ -753,15 +756,41 @@
                   <span className="mx-2"><IconChevronRight /></span>
                   <span className="font-semibold text-gray-800">{activeTask?.id}</span>
                 </div>
-                <div className={`bg-white p-6 rounded-lg shadow-sm border-t-4 ${activeTask?.scope === 'SAS' ? 'border-blue-500' : 'border-purple-500'} flex justify-between`}>
+                
+                <div className={`bg-white p-6 rounded-lg shadow-sm border-t-4 ${activeTask?.scope === 'SAS' ? 'border-blue-500' : 'border-purple-500'} flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-800">Task: {activeTask?.id}</h2>
                     <p className="text-gray-600">ยูนิต: {activeTask?.unit} | ลูกค้า: {activeTask?.customerName}</p>
+                    <p className="mt-2 text-sm">
+                      สถานะ: <span className={`px-2 py-1 rounded-md text-xs font-bold ${activeTask?.status === 'Active' ? 'bg-green-100 text-green-700' : activeTask?.status === 'Reject' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{activeTask?.status || 'รอดำเนินการ'}</span>
+                    </p>
                   </div>
-                  <button onClick={() => setShowDefectForm(true)} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg flex items-center">
-                    <span className="mr-1"><IconPlus /></span> เพิ่ม Defect
-                  </button>
+                  
+                  <div className="flex flex-wrap gap-2">
+                    {/* ปุ่ม เปิดใบงาน และ Reject (Phase 2) */}
+                    {(activeTask?.status === 'รอดำเนินการ' || !activeTask?.status) && (
+                      <>
+                        <button onClick={() => handleUpdateTaskStatus(activeTask.id, 'Active')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center text-sm font-medium shadow-sm">
+                          เปิดใบงาน
+                        </button>
+                        {activeTask?.scope === 'VO' && (
+                          <button onClick={() => handleUpdateTaskStatus(activeTask.id, 'Reject')} className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center text-sm font-medium shadow-sm">
+                            Reject
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {/* ปุ่มเพิ่ม Defect จะถูกปิดไว้เมื่อสถานะคือ Reject */}
+                    <button 
+                      onClick={() => setShowDefectForm(true)} 
+                      disabled={activeTask?.status === 'Reject'}
+                      className={`text-white px-4 py-2 rounded-lg flex items-center text-sm font-medium shadow-sm ${activeTask?.status === 'Reject' ? 'bg-gray-300 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'}`}>
+                      <span className="mr-1"><IconPlus /></span> เพิ่ม Defect
+                    </button>
+                  </div>
                 </div>
+                
                 <div className="bg-white rounded-lg shadow-sm mt-6 overflow-hidden overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -787,7 +816,11 @@
                              {defect.major === 'ใช่' && <span className="px-2 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">Major</span>}
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <button onClick={(e) => handleDeleteDefect(defect.id, e)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-full transition-colors" title="ลบรายการ Defect">
+                            <button 
+                              onClick={(e) => handleDeleteDefect(defect.id, e)} 
+                              disabled={activeTask?.status === 'Reject'}
+                              className={`p-2 rounded-full transition-colors ${activeTask?.status === 'Reject' ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600 hover:bg-red-100'}`} 
+                              title="ลบรายการ Defect">
                               <IconTrash />
                             </button>   
                           </td>
@@ -825,7 +858,8 @@
                   </div>
                 </div>
 
-                <DefectImagesUploader defect={activeDefect} onSuccess={fetchData} />
+                {/* ส่ง props taskStatus เข้าไปเพื่อให้เช็คสิทธิ์การ Upload ภาพ */}
+                <DefectImagesUploader defect={activeDefect} taskStatus={activeTask?.status} onSuccess={fetchData} />
               </div>
             )}
 
