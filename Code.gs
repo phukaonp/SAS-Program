@@ -120,23 +120,28 @@ function addJob(formData) {
 function addTask(jobId, formData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('TASK');
+  
+  // สร้าง Task ID ใหม่
   const newId = 'TSK-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
   
+  // จัดรูปแบบวัน-เวลาสำหรับบันทึกประวัติ (Column K) เช่น 15/3/2026, 16:05:29
+  const historyLog = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy, HH:mm:ss');
+  
+  // เพิ่มข้อมูลลงใน Sheet โดยเรียงลำดับให้ตรงกับ Column A - K
   sheet.appendRow([
-    newId,                        
-    jobId,                        
-    formData.scope || 'SAS',      
-    formData.building || '',      
-    formData.unit || '',          
-    'รอดำเนินการ',                  
-    formData.customerName || '',  
-    formData.targetFixDate || '', 
-    '',                           
-    '',                           
-    '',                           
-    formData.remark || '',        
-    new Date()                    
+    newId,                        // Col A: TaskID
+    jobId,                        // Col B: JobID
+    formData.scope || 'SAS',      // Col C: Scope
+    formData.building || '',      // Col D: Building
+    formData.unit || '',          // Col E: Unit
+    'รอดำเนินการ',                  // Col F: TaskStatus
+    formData.customerName || '',  // Col G: ชื่อลูกค้า
+    formData.targetFixDate || '', // Col H: กำหนดวันเข้าแก้ไข
+    '',                           // Col I: Duration (เว้นว่างไว้ก่อน)
+    formData.remark || '',        // Col J: รายละเอียด
+    historyLog                    // Col K: ประวัติ (เวลาที่สร้าง Task)
   ]);
+  
   return newId;
 }
 
