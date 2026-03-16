@@ -597,60 +597,88 @@
                   </button>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm overflow-hidden overflow-x-auto">
-                 <table className="min-w-full divide-y divide-gray-200">
+                  <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job ID</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Site</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">สถานะ</th> {/* เพิ่มหัวตารางตรงนี้ */}
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ผู้ดูแล (Owner)</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ชื่อ Staff</th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">สถานะ</th>
                         <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Tasks</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">หมายเหตุ</th>
                         <th className="px-6 py-3"></th>
                       </tr>
                     </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {jobs.map((job) => (
-                    <tr 
-                      key={job.id} 
-                      className="hover:bg-blue-50 cursor-pointer transition-colors" 
-                      onClick={() => { setActiveJobId(job.id); setView('JOB_DETAIL'); }}
-                    >
-                      <td className="px-6 py-4 font-medium text-blue-600">{job.id}</td>
-                      <td className="px-6 py-4 text-sm">{job.site}</td>
-                      <td className="px-6 py-4 text-sm">{job.ownerCompany || job.owner}</td>
-                          
-                      {/* เพิ่มคอลัมน์สถานะตรงนี้ */}
-                      <td className="px-6 py-4 text-center">
-                        <span className="px-2.5 py-1 text-[11px] font-medium rounded-md border bg-amber-50 text-amber-700 border-amber-200">
-                          {job.status}
-                        </span>
-                      </td>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {jobs.map((job) => (
+                        <tr 
+                          key={job.id} 
+                          className="hover:bg-blue-50 cursor-pointer transition-colors" 
+                          onClick={() => { setActiveJobId(job.id); setView('JOB_DETAIL'); }}
+                        >
+                          {/* คอลัมน์ที่ 1: JOB ID และ วันตอบกลับ Owner */}
+                          <td className="px-6 py-4">
+                            <div className="font-medium text-blue-600">{job.id}</div>
+                            {job.replyDueDate && (
+                              <div className="text-xs text-gray-500 mt-1">Due: {job.replyDueDate}</div>
+                            )}
+                          </td>
 
-                      <td className="px-6 py-4 text-sm text-center">
-                        <span className="bg-gray-100 px-3 py-1 rounded-full font-bold text-xs">
-                          {job.tasks ? job.tasks.length : 0}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right space-x-2">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); setEditingJob(job); setShowJobForm(true); }} 
-                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors" title="ตั้งค่า/แก้ไข">
-                          <IconSettings />
-                        </button>
-                        <button 
-                          onClick={(e) => handleDeleteJob(job.id, e)} 
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-full transition-colors" title="ลบใบงานหลัก">
-                          <IconTrash />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {jobs.length === 0 && <tr><td colSpan="5" className="px-6 py-10 text-center text-gray-500">ไม่มีข้อมูลใบงานหลัก</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+                          {/* คอลัมน์ที่ 2: Site */}
+                          <td className="px-6 py-4 text-sm text-gray-900">{job.site}</td>
+
+                          {/* คอลัมน์ที่ 3: ผู้ดูแล (Owner) และ ชื่อบริษัทผู้ดูแล */}
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900">{job.owner || '-'}</div>
+                            {job.ownerCompany && (
+                              <div className="text-xs text-gray-500 mt-1">{job.ownerCompany}</div>
+                            )}
+                          </td>
+
+                          {/* คอลัมน์ที่ 4: ชื่อ Staff */}
+                          <td className="px-6 py-4 text-sm text-gray-900">{job.staff || '-'}</td>
+
+                          {/* คอลัมน์ที่ 5: สถานะ */}
+                          <td className="px-6 py-4 text-center">
+                            <span className="px-2.5 py-1 text-[11px] font-medium rounded-md border bg-amber-50 text-amber-700 border-amber-200">
+                              {job.status}
+                            </span>
+                          </td>
+
+                          {/* คอลัมน์ที่ 6: Tasks */}
+                          <td className="px-6 py-4 text-sm text-center">
+                            <span className="bg-gray-100 px-3 py-1 rounded-full font-bold text-xs">
+                              {job.tasks ? job.tasks.length : 0}
+                            </span>
+                          </td>
+
+                          {/* คอลัมน์ที่ 7: หมายเหตุ */}
+                          <td className="px-6 py-4 text-sm text-gray-500 max-w-[150px] truncate" title={job.remark}>
+                            {job.remark || '-'}
+                          </td>
+
+                          {/* คอลัมน์ที่ 8: ปุ่มจัดการ */}
+                          <td className="px-6 py-4 text-right space-x-2">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setEditingJob(job); setShowJobForm(true); }} 
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors" title="ตั้งค่า/แก้ไข">
+                              <IconSettings />
+                            </button>
+                            <button 
+                              onClick={(e) => handleDeleteJob(job.id, e)} 
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-full transition-colors" title="ลบใบงานหลัก">
+                              <IconTrash />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {jobs.length === 0 && <tr><td colSpan="8" className="px-6 py-10 text-center text-gray-500">ไม่มีข้อมูลใบงานหลัก</td></tr>}
+                    </tbody>
+                  </table>
+                              </div>
+                            </div>
+                          )}
 
             {view === 'JOB_DETAIL' && (
               <div className="space-y-4">
