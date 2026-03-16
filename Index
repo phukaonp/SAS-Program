@@ -664,23 +664,43 @@
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                   {activeJob?.tasks?.map(task => (
                     <div key={task.id} className="bg-white rounded-lg shadow-sm p-5 border hover:shadow-md relative overflow-hidden">
+                      {/* แถบสีด้านซ้ายบอก Scope */}
                       <div className={`absolute top-0 left-0 w-1 h-full ${task.scope === 'SAS' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
                       
+                      {/* ส่วนหัว: Task ID + Badge Scope + ปุ่มลบ */}
                       <div className="flex justify-between items-center mb-3">
-                         <span className="font-bold text-lg">{task.id}</span>
-                         <div className="flex items-center gap-2">
-                           <span className={`px-2 py-1 text-xs font-bold rounded-full ${task.scope === 'SAS' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
-                             {task.scope}
-                           </span>
-                           <button onClick={(e) => handleDeleteTask(task.id, e)} className="text-gray-400 hover:text-red-600 p-1 rounded-full hover:bg-red-50 transition-colors" title="ลบใบงานย่อย">
-                             <IconTrash />
-                           </button>
-                         </div>
+                        <span className="font-bold text-lg">{task.id}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 text-xs font-bold rounded-full ${task.scope === 'SAS' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                            {task.scope}
+                          </span>
+                          <button onClick={(e) => handleDeleteTask(task.id, e)} className="text-gray-400 hover:text-red-600 p-1 rounded-full hover:bg-red-50 transition-colors" title="ลบใบงานย่อย">
+                            <IconTrash />
+                          </button>
+                        </div>
                       </div>
 
-                      <p className="text-sm text-gray-600">ยูนิต: {task.building} - {task.unit}</p>
-                      <p className="text-sm text-gray-600 mb-4">Defects: {task.defects?.length || 0} รายการ</p>
-                      <button onClick={() => { setActiveTaskId(task.id); setView('TASK_DETAIL'); }} className="w-full py-2 bg-gray-50 hover:bg-gray-100 border rounded-md text-sm font-medium">จัดการ Defect</button>
+                      {/* ส่วนข้อมูล: ยูนิต, จำนวน Defect และ สถานะ (ใหม่) */}
+                      <div className="mb-4">
+                        <p className="text-sm text-gray-600 mb-2">ยูนิต: {task.building} - {task.unit}</p>
+                        <div className="flex justify-between items-center">
+                          <p className="text-sm text-gray-600">Defects: {task.defects?.length || 0} รายการ</p>
+                          
+                          {/* ป้ายแสดงสถานะ (Status Badge) ปรับเปลี่ยนสีตามข้อความสถานะ */}
+                          <span className={`px-2.5 py-1 text-[11px] font-medium rounded-md border ${
+                            task.status === 'รอดำเนินการ' ? 'bg-amber-50 text-amber-700 border-amber-200' : 
+                            task.status === 'เสร็จสิ้น' ? 'bg-green-50 text-green-700 border-green-200' :
+                            'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}>
+                            {task.status || 'รอดำเนินการ'}
+                          </span>
+                        </div>
+                      </div>
+  
+                      {/* ปุ่มจัดการ */}
+                      <button onClick={() => { setActiveTaskId(task.id); setView('TASK_DETAIL'); }} className="w-full py-2 bg-gray-50 hover:bg-gray-100 border rounded-md text-sm font-medium transition-colors">
+                        จัดการ Defect
+                      </button>
                     </div>
                   ))}
                 </div>
