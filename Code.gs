@@ -11,7 +11,7 @@ function doGet() {
 function initSheets() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheetsInfo = {
-    'JOB': ['JobID', 'Site', 'Owner', 'OwnerCompany', 'Staff', 'ReplyDueDate', 'Remark', 'Timestamp'],
+    'JOB': ['JobID', 'Site', 'Owner', 'OwnerCompany', 'Staff', 'ReplyDueDate', 'Remark', 'Timestamp', 'Status'],
     'TASK': ['TaskID', 'JobID', 'Scope', 'Building', 'Unit', 'Status', 'CustomerName', 'TargetFixDate', 'ActualStartDate', 'ActualEndDate', 'Duration', 'Remark', 'Timestamp'],
     'DEFECT': [
       'DefectID', 'TaskID', 'TargetStartDate', 'TargetEndDate', 'Status', 'MainCategory', 
@@ -33,6 +33,7 @@ function initSheets() {
 function getAllData() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   
+  // ฟังก์ชันย่อยสำหรับแปลงข้อมูลจาก Sheet เป็น Object (แก้ให้ถูกต้อง)
   const getSheetData = (sheetName) => {
     const sheet = ss.getSheetByName(sheetName);
     if (!sheet) return [];
@@ -92,6 +93,7 @@ function getAllData() {
       staff: job.Staff,
       replyDueDate: job.ReplyDueDate,
       remark: job.Remark,
+      status: job.Status || 'รอดำเนินการ', // ดึงข้อมูลสถานะ
       tasks: jobTasks
     };
   });
@@ -105,14 +107,15 @@ function addJob(formData) {
   const newId = 'JOB-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
   
   sheet.appendRow([
-    newId,                        
-    formData.site || '',          
-    formData.owner || '',         
-    formData.ownerCompany || '',  
-    formData.staff || '',         
-    formData.replyDueDate || '',  
-    formData.remark || '',        
-    new Date()                    
+    newId,                        // Col A
+    formData.site || '',          // Col B
+    formData.owner || '',         // Col C
+    formData.ownerCompany || '',  // Col D
+    formData.staff || '',         // Col E
+    formData.replyDueDate || '',  // Col F
+    formData.remark || '',        // Col G
+    new Date(),                   // Col H: Timestamp
+    'รอดำเนินการ'                   // Col I: เพิ่ม Status ตามเงื่อนไข
   ]);
   return newId;
 }
