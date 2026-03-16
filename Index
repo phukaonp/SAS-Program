@@ -8,7 +8,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
-<body class="bg-gray-100 font-sans text-gray-900">
+<body class="bg-gray-50 font-sans text-gray-900">
   <div id="root"></div>
 
   <script type="text/babel">
@@ -34,8 +34,20 @@
     const IconClipboard = () => <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 14h6"/><path d="M9 18h6"/><path d="M9 10h6"/></svg>;
     const IconSettings = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>;
     const IconTrash = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+    const IconCheckCircle = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>;
 
-    // --- Component จัดการอัปโหลดรูป (Phase 2) ---
+    // --- UI Components ---
+    const StatusBadge = ({ status }) => {
+      let colorClass = 'bg-gray-100 text-gray-700 border-gray-200'; // Default
+      if (status === 'Active') colorClass = 'bg-blue-50 text-blue-700 border-blue-200';
+      else if (status === 'Closed' || status === 'แก้ไขแล้ว' || status === 'เสร็จสิ้น') colorClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      else if (status === 'รอดำเนินการ' || status === 'ยังไม่แก้ไข') colorClass = 'bg-amber-50 text-amber-700 border-amber-200';
+      else if (status === 'Reject') colorClass = 'bg-red-50 text-red-700 border-red-200';
+      
+      return <span className={`px-2.5 py-1 text-[11px] font-bold rounded-md border ${colorClass}`}>{status || 'ไม่มีสถานะ'}</span>;
+    };
+
+    // --- Component จัดการอัปโหลดรูป ---
     const DefectImagesUploader = ({ defect, taskStatus, onSuccess }) => {
       const [images, setImages] = useState({
         imgUnit: defect.imgUnit || '',
@@ -43,10 +55,13 @@
         imgDuring: defect.imgDuring || '',
         imgAfter: defect.imgAfter || ''
       });
-      const [isUploading, setIsUploading] = useState(false);
+      const [uploadingField, setUploadingField] = useState(null);
+      const [isSavingStatus, setIsSavingStatus] = useState(false);
 
       const isTaskActive = taskStatus === 'Active';
       const isTaskRejected = taskStatus === 'Reject';
+      const isTaskClosed = taskStatus === 'Closed';
+      const isDefectFixed = defect.status === 'แก้ไขแล้ว';
 
       const handleFileChange = (field, e) => {
         const file = e.target.files[0];
@@ -59,57 +74,129 @@
         }
       };
 
-      const handleSaveImages = () => {
-        setIsUploading(true);
+      const handleUploadSingle = (field) => {
+        setUploadingField(field);
         google.script.run
-          .withSuccessHandler(res => {
-            alert('อัปโหลดและบันทึกภาพสำเร็จ');
-            setIsUploading(false);
+          .withSuccessHandler(url => {
+            setImages(prev => ({ ...prev, [field]: url }));
+            setUploadingField(null);
+            onSuccess(); // อัปเดตข้อมูลเบื้องหลัง
+          })
+          .withFailureHandler(err => {
+            alert('เกิดข้อผิดพลาดในการบันทึกรูป: ' + err.message);
+            setUploadingField(null);
+          })
+          .uploadSingleDefectImage(defect.id, field, images[field]);
+      };
+
+      const handleFinishDefect = () => {
+        setIsSavingStatus(true);
+        google.script.run
+          .withSuccessHandler(() => {
+            alert('เปลี่ยนสถานะ Defect เป็น "แก้ไขแล้ว" สำเร็จ');
+            setIsSavingStatus(false);
             onSuccess(); 
           })
           .withFailureHandler(err => {
-            alert('เกิดข้อผิดพลาดในการอัปโหลด');
-            setIsUploading(false);
+            alert('เกิดข้อผิดพลาด: ' + err.message);
+            setIsSavingStatus(false);
           })
-          .uploadDefectImages(defect.id, images);
+          .updateDefectStatus(defect.id, 'แก้ไขแล้ว');
       };
 
       const ImageBox = ({ label, field, disabledReason }) => {
         const isDisabled = !!disabledReason;
+        const currentImg = images[field];
+        const isBase64 = currentImg && currentImg.startsWith('data:image');
+        const isUploaded = currentImg && currentImg.startsWith('http');
+        const isUploading = uploadingField === field;
+
         return (
-          <div className={`border rounded-lg p-4 flex flex-col items-center justify-center ${isDisabled ? 'bg-gray-100' : 'bg-gray-50'}`}>
-            <h4 className="font-semibold text-gray-700 mb-2 text-sm text-center">{label}</h4>
-            {images[field] ? (
-              <img src={images[field]} alt={label} className={`h-32 object-contain mb-3 rounded border bg-white ${isDisabled ? 'opacity-50' : ''}`} />
-            ) : (
-              <div className={`h-32 flex items-center justify-center mb-3 border-2 border-dashed w-full rounded text-xs text-center px-2 ${isDisabled ? 'text-gray-400 border-gray-200' : 'text-gray-400 border-gray-300'}`}>
-                {isDisabled ? disabledReason : 'ไม่มีรูปภาพ'}
-              </div>
-            )}
-            <input type="file" accept="image/*" onChange={(e) => handleFileChange(field, e)} disabled={isDisabled || isTaskRejected} className="text-xs w-full disabled:opacity-50 cursor-pointer" />
+          <div className={`relative border rounded-xl p-4 flex flex-col items-center justify-between shadow-sm transition-all ${isDisabled ? 'bg-gray-100 border-gray-200' : isBase64 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200'}`}>
+            <h4 className="font-semibold text-gray-700 mb-3 text-sm text-center w-full pb-2 border-b">{label}</h4>
+            
+            <div className="flex-1 w-full flex flex-col items-center justify-center mb-4">
+              {currentImg ? (
+                <div className="relative group w-full flex justify-center">
+                  <img src={currentImg} alt={label} className={`h-32 object-cover rounded-lg border shadow-sm ${isDisabled ? 'opacity-50' : ''}`} />
+                  {isUploaded && (
+                    <div className="absolute top-2 right-2 bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center shadow-md">
+                      <span className="mr-1"><IconCheckCircle/></span> บันทึกแล้ว
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className={`h-32 flex flex-col items-center justify-center w-full rounded-lg text-xs text-center p-4 border-2 border-dashed ${isDisabled ? 'text-gray-400 border-gray-200' : 'text-gray-400 border-gray-300 bg-gray-50'}`}>
+                  <svg className="w-8 h-8 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L28 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                  {isDisabled ? disabledReason : 'ยังไม่มีรูปภาพ'}
+                </div>
+              )}
+            </div>
+            
+            <div className="w-full flex flex-col gap-2">
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={(e) => handleFileChange(field, e)} 
+                disabled={isDisabled || isTaskRejected || isDefectFixed || isTaskClosed} 
+                className={`text-xs w-full disabled:opacity-50 cursor-pointer file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 ${(isTaskRejected || isDefectFixed || isTaskClosed) ? 'hidden' : ''}`} 
+              />
+              
+              {isBase64 && (
+                <button
+                  onClick={() => handleUploadSingle(field)}
+                  disabled={isUploading}
+                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg shadow-md font-bold transition-colors flex justify-center items-center animate-pulse hover:animate-none"
+                >
+                  {isUploading ? 'กำลังบันทึก...' : 'คลิกเพื่อบันทึกรูปนี้'}
+                </button>
+              )}
+            </div>
           </div>
         );
       };
 
+      const allImagesUploadedAndSaved = 
+        images.imgUnit && images.imgUnit.startsWith('http') &&
+        images.imgBefore && images.imgBefore.startsWith('http') &&
+        images.imgDuring && images.imgDuring.startsWith('http') &&
+        images.imgAfter && images.imgAfter.startsWith('http');
+
       return (
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold text-gray-800">อัปโหลดรูปภาพ (4 รูป)</h3>
-            {!isTaskActive && !isTaskRejected && <span className="text-sm text-amber-600 font-medium">⚠️ กดเปิดใบงาน (Active) เพื่ออัปโหลดรูปภาพ 1, 3 และ 4</span>}
-            {isTaskRejected && <span className="text-sm text-red-600 font-medium">⚠️ ใบงานถูก Reject ไม่สามารถอัปโหลดภาพได้</span>}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mt-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-3">
+            <div>
+              <h3 className="text-xl font-bold text-gray-800">จัดการรูปภาพ (4 รูป)</h3>
+              <p className="text-sm text-gray-500 mt-1">อัปโหลดและบันทึกภาพให้ครบทั้ง 4 ขั้นตอนเพื่อจบงาน</p>
+            </div>
+            <div className="text-right">
+              {!isTaskActive && !isTaskRejected && !isTaskClosed && <span className="inline-block px-3 py-1 bg-amber-50 text-amber-700 text-sm font-medium rounded-md border border-amber-200">⚠️ ต้องเปิดใบงาน (Active) ก่อนอัปโหลดรูป</span>}
+              {isTaskRejected && <span className="inline-block px-3 py-1 bg-red-50 text-red-700 text-sm font-medium rounded-md border border-red-200">⚠️ ใบงานถูก Reject ไม่สามารถจัดการรูปได้</span>}
+              {isTaskClosed && <span className="inline-block px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded-md border border-gray-200">🔒 ใบงานถูกปิดแล้ว</span>}
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <ImageBox label="1. รูปภาพเลขยูนิต" field="imgUnit" disabledReason={!isTaskActive && !images['imgUnit'] ? "เปิดใบงานก่อน" : null} />
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <ImageBox label="1. รูปภาพเลขยูนิต" field="imgUnit" disabledReason={!isTaskActive && !images['imgUnit'] ? "กรุณาเปิดใบงานก่อน" : null} />
             <ImageBox label="2. รูปภาพก่อนแก้ไข" field="imgBefore" disabledReason={isTaskRejected ? "ไม่อนุญาต" : null} />
-            <ImageBox label="3. รูปภาพระหว่างแก้ไข" field="imgDuring" disabledReason={!isTaskActive && !images['imgDuring'] ? "เปิดใบงานก่อน" : null} />
-            <ImageBox label="4. รูปภาพหลังแก้ไข" field="imgAfter" disabledReason={!isTaskActive && !images['imgAfter'] ? "เปิดใบงานก่อน" : null} />
+            <ImageBox label="3. รูปภาพระหว่างแก้ไข" field="imgDuring" disabledReason={!isTaskActive && !images['imgDuring'] ? "กรุณาเปิดใบงานก่อน" : null} />
+            <ImageBox label="4. รูปภาพหลังแก้ไข" field="imgAfter" disabledReason={!isTaskActive && !images['imgAfter'] ? "กรุณาเปิดใบงานก่อน" : null} />
           </div>
-          <div className="mt-6 flex justify-end">
+          
+          <div className="mt-8 flex justify-end border-t pt-5">
             <button 
-              onClick={handleSaveImages} 
-              disabled={isUploading || isTaskRejected} 
-              className={`px-6 py-2 text-white rounded-md flex items-center ${(isUploading || isTaskRejected) ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}>
-              {isUploading ? 'กำลังอัปโหลด...' : <><span className="mr-2"><IconSave/></span> บันทึกรูปภาพทั้งหมด</>}
+              onClick={handleFinishDefect} 
+              disabled={!allImagesUploadedAndSaved || isSavingStatus || isDefectFixed || isTaskClosed} 
+              className={`px-8 py-3 text-white rounded-lg flex items-center font-bold text-sm shadow-sm transition-all ${
+                isDefectFixed || isTaskClosed ? 'bg-gray-300 text-gray-600 cursor-not-allowed' 
+                : !allImagesUploadedAndSaved ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+                : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 shadow-lg hover:-translate-y-0.5'
+              }`}
+              title={!allImagesUploadedAndSaved ? 'ต้องบันทึกรูปภาพให้ครบ 4 รูปก่อน' : ''}
+            >
+              {isSavingStatus ? 'กำลังอัปเดตระบบ...' : 
+               isDefectFixed ? '✅ แก้ไข Defect เสร็จสิ้นแล้ว' : 
+               <><span className="mr-2"><IconCheckCircle/></span> ยืนยันแก้ไข Defect เสร็จสิ้น</>}
             </button>
           </div>
         </div>
@@ -133,6 +220,7 @@
       const [showTaskForm, setShowTaskForm] = useState(false);
       const [showDefectForm, setShowDefectForm] = useState(false);
       const [editingJob, setEditingJob] = useState(null);
+      
       const activeJob = jobs.find(j => j.id === activeJobId);
       const activeTask = activeJob?.tasks?.find(t => t.id === activeTaskId);
       const activeDefect = activeTask?.defects?.find(d => d.id === activeDefectId);
@@ -275,7 +363,6 @@
         }
       };
 
-      // Phase 2: ฟังก์ชันเปลี่ยนสถานะ Task (เปิดใบงาน / Reject)
       const handleUpdateTaskStatus = (id, status) => {
         if (window.confirm(`⚠️ คุณต้องการเปลี่ยนสถานะใบงานย่อยเป็น "${status}" ใช่หรือไม่?`)) {
           setIsSaving(true);
@@ -365,8 +452,7 @@
         
         const handleSubmit = () => {
           if (isEditMode) {
-            const isConfirmed = window.confirm('คุณยืนยันที่จะบันทึกการแก้ไขข้อมูลนี้ใช่หรือไม่?');
-            if (isConfirmed) {
+            if (window.confirm('คุณยืนยันที่จะบันทึกการแก้ไขข้อมูลนี้ใช่หรือไม่?')) {
               handleUpdateJob(formData);
             }
           } else {
@@ -375,48 +461,48 @@
         };
 
         return (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg w-full max-w-2xl p-6 shadow-xl">
-              <div className="flex justify-between items-center mb-4">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-2xl">
+              <div className="flex justify-between items-center mb-6 border-b pb-3">
                 <h2 className="text-xl font-bold text-gray-800">{isEditMode ? `แก้ไขใบงานหลัก: ${formData.id}` : 'สร้างใบงานหลัก (JOB)'}</h2>
-                <button onClick={handleClose} className="text-gray-500 hover:text-red-500"><IconX /></button>
+                <button onClick={handleClose} className="text-gray-400 hover:text-red-500 transition-colors p-1"><IconX /></button>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Site *</label>
-                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.site} onChange={handleSiteChange}>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Site <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.site} onChange={handleSiteChange}>
                     {uniqueSites.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">ผู้ดูแล (Owner) *</label>
-                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.owner} onChange={handleOwnerChange}>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ผู้ดูแล (Owner) <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.owner} onChange={handleOwnerChange}>
                     {uniqueOwnersList.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">ชื่อบริษัทผู้ดูแล</label>
-                  <input type="text" className="mt-1 block w-full rounded-md border border-gray-300 p-2 bg-gray-100 text-gray-600" value={formData.ownerCompany} readOnly placeholder="ดึงข้อมูลอัตโนมัติ" />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ชื่อบริษัทผู้ดูแล</label>
+                  <input type="text" className="block w-full rounded-lg border-gray-200 bg-gray-50 shadow-sm text-gray-500 text-sm py-2 px-3 border cursor-not-allowed" value={formData.ownerCompany} readOnly placeholder="ดึงข้อมูลอัตโนมัติ" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">ชื่อ Staff *</label>
-                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.staff} onChange={e => setFormData({...formData, staff: e.target.value})}>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ชื่อ Staff <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.staff} onChange={e => setFormData({...formData, staff: e.target.value})}>
                     {STAFFS.map(s => <option key={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">กำหนดวันตอบกลับ Owner</label>
-                  <input type="date" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.replyDueDate} onChange={e => setFormData({...formData, replyDueDate: e.target.value})} />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">กำหนดวันตอบกลับ Owner</label>
+                  <input type="date" className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.replyDueDate} onChange={e => setFormData({...formData, replyDueDate: e.target.value})} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700">หมายเหตุ</label>
-                  <textarea className="mt-1 block w-full rounded-md border border-gray-300 p-2" rows="2" value={formData.remark} onChange={e => setFormData({...formData, remark: e.target.value})}></textarea>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">หมายเหตุ</label>
+                  <textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" rows="2" value={formData.remark} onChange={e => setFormData({...formData, remark: e.target.value})} placeholder="ระบุหมายเหตุเพิ่มเติม (ถ้ามี)"></textarea>
                 </div>
               </div>
-              <div className="mt-6 flex justify-end gap-3">
-                <button onClick={handleClose} className="px-4 py-2 border rounded-md text-gray-600 hover:bg-gray-50">ยกเลิก</button>
-                <button onClick={handleSubmit} disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
-                  {isSaving ? 'กำลังบันทึก...' : <><span className="mr-2"><IconSave/></span> {isEditMode ? 'บันทึกการแก้ไข' : 'บันทึก'}</>}
+              <div className="mt-8 flex justify-end gap-3">
+                <button onClick={handleClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors">ยกเลิก</button>
+                <button onClick={handleSubmit} disabled={isSaving} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center shadow-md shadow-blue-200 transition-all disabled:opacity-70">
+                  {isSaving ? 'กำลังบันทึก...' : <><span className="mr-2"><IconSave/></span> {isEditMode ? 'บันทึกการแก้ไข' : 'บันทึกใบงาน'}</>}
                 </button>
               </div>
             </div>
@@ -427,47 +513,47 @@
       const TaskModal = () => {
         const [formData, setFormData] = useState({ scope: 'SAS', building: '', unit: '', customerName: '', targetFixDate: '', remark: '' });
         return (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg w-full max-w-2xl p-6 shadow-xl">
-              <div className="flex justify-between items-center mb-4">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-2xl">
+              <div className="flex justify-between items-center mb-6 border-b pb-3">
                 <h2 className="text-xl font-bold text-gray-800">สร้างใบงานย่อย (TASK)</h2>
-                <button onClick={() => setShowTaskForm(false)} className="text-gray-500 hover:text-red-500"><IconX /></button>
+                <button onClick={() => setShowTaskForm(false)} className="text-gray-400 hover:text-red-500 transition-colors p-1"><IconX /></button>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-5">
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700">Scope งาน *</label>
-                  <div className="mt-2 flex gap-4">
-                    <label className="inline-flex items-center">
-                      <input type="radio" className="form-radio text-blue-600 w-5 h-5" value="SAS" checked={formData.scope === 'SAS'} onChange={e => setFormData({...formData, scope: e.target.value})} />
-                      <span className="ml-2">SAS (ในความรับผิดชอบ)</span>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Scope งาน <span className="text-red-500">*</span></label>
+                  <div className="flex gap-6">
+                    <label className="inline-flex items-center cursor-pointer p-3 border rounded-lg hover:bg-gray-50 flex-1">
+                      <input type="radio" className="form-radio text-blue-600 w-5 h-5 focus:ring-blue-500" value="SAS" checked={formData.scope === 'SAS'} onChange={e => setFormData({...formData, scope: e.target.value})} />
+                      <span className="ml-3 font-medium text-gray-800">SAS (ในความรับผิดชอบ)</span>
                     </label>
-                    <label className="inline-flex items-center">
-                      <input type="radio" className="form-radio text-purple-600 w-5 h-5" value="VO" checked={formData.scope === 'VO'} onChange={e => setFormData({...formData, scope: e.target.value})} />
-                      <span className="ml-2">VO (นอกเหนือความรับผิดชอบ)</span>
+                    <label className="inline-flex items-center cursor-pointer p-3 border rounded-lg hover:bg-gray-50 flex-1">
+                      <input type="radio" className="form-radio text-purple-600 w-5 h-5 focus:ring-purple-500" value="VO" checked={formData.scope === 'VO'} onChange={e => setFormData({...formData, scope: e.target.value})} />
+                      <span className="ml-3 font-medium text-gray-800">VO (นอกเหนือความรับผิดชอบ)</span>
                     </label>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Building *</label>
-                  <input type="text" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.building} onChange={e => setFormData({...formData, building: e.target.value})} placeholder="ex. Tower A" />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Building <span className="text-red-500">*</span></label>
+                  <input type="text" className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.building} onChange={e => setFormData({...formData, building: e.target.value})} placeholder="ex. Tower A" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Unit No. *</label>
-                  <input type="text" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} placeholder="ex. A101" />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Unit No. <span className="text-red-500">*</span></label>
+                  <input type="text" className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} placeholder="ex. A101" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">ชื่อลูกค้า *</label>
-                  <input type="text" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})} />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ชื่อลูกค้า <span className="text-red-500">*</span></label>
+                  <input type="text" className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})} placeholder="ระบุชื่อลูกค้า" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">กำหนดวันเข้าแก้ไข *</label>
-                  <input type="date" className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.targetFixDate} onChange={e => setFormData({...formData, targetFixDate: e.target.value})} />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">กำหนดวันเข้าแก้ไข <span className="text-red-500">*</span></label>
+                  <input type="date" className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.targetFixDate} onChange={e => setFormData({...formData, targetFixDate: e.target.value})} />
                 </div>
-               </div>
-              <div className="mt-6 flex justify-end gap-3">
-                <button onClick={() => setShowTaskForm(false)} className="px-4 py-2 border rounded-md text-gray-600 hover:bg-gray-50">ยกเลิก</button>
-                <button onClick={() => handleCreateTask(formData)} disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
-                   {isSaving ? 'กำลังบันทึก...' : <><span className="mr-2"><IconSave/></span> บันทึก</>}
+              </div>
+              <div className="mt-8 flex justify-end gap-3">
+                <button onClick={() => setShowTaskForm(false)} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors">ยกเลิก</button>
+                <button onClick={() => handleCreateTask(formData)} disabled={isSaving} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center shadow-md shadow-blue-200 transition-all disabled:opacity-70">
+                   {isSaving ? 'กำลังบันทึก...' : <><span className="mr-2"><IconSave/></span> บันทึกใบงานย่อย</>}
                 </button>
               </div>
             </div>
@@ -487,7 +573,7 @@
           targetEndDate: '', 
           voSteps: '', 
           remark: '',
-          imgBefore: '' // สำหรับเก็บรูปภาพก่อนแก้ไข
+          imgBefore: ''
         });
         
         const handleMainCatChange = (e) => {
@@ -504,87 +590,92 @@
         };
         
         return (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-10">
-            <div className="bg-white rounded-lg w-full max-w-3xl p-6 shadow-xl my-auto">
-              <div className="flex justify-between items-center border-b pb-3 mb-4">
-                <h2 className="text-xl font-bold text-gray-800">เพิ่มรายการ Defect</h2>
-                <button onClick={() => setShowDefectForm(false)} className="text-gray-500 hover:text-red-500"><IconX /></button>
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-10 px-4">
+            <div className="bg-white rounded-2xl w-full max-w-3xl p-6 shadow-2xl my-auto">
+              <div className="flex justify-between items-center border-b pb-3 mb-6">
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <span className="bg-red-100 text-red-600 p-1 rounded-md"><IconPlus/></span>
+                  เพิ่มรายการ Defect
+                </h2>
+                <button onClick={() => setShowDefectForm(false)} className="text-gray-400 hover:text-red-500 transition-colors p-1"><IconX /></button>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">ลักษณะงานหลัก *</label>
-                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.mainCategory} onChange={handleMainCatChange}>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ลักษณะงานหลัก <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.mainCategory} onChange={handleMainCatChange}>
                     {MAIN_CATEGORIES.map(c => <option key={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">ลักษณะงานรอง *</label>
-                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.subCategory} onChange={e => setFormData({...formData, subCategory: e.target.value})}>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ลักษณะงานรอง <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.subCategory} onChange={e => setFormData({...formData, subCategory: e.target.value})}>
                     {(SUB_CATEGORIES[formData.mainCategory] || []).map(c => <option key={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">ทีมเข้าแก้ไข *</label>
-                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" value={formData.team} onChange={e => setFormData({...formData, team: e.target.value})}>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ทีมเข้าแก้ไข <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.team} onChange={e => setFormData({...formData, team: e.target.value})}>
                     {TEAMS.map(t => <option key={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Major (ปัญหาหลัก) *</label>
-                  <select className="mt-1 block w-full rounded-md border border-gray-300 p-2" 
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Major (ปัญหาหลัก) <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm py-2 px-3 border" 
                     value={formData.major} 
                     onChange={e => setFormData({...formData, major: e.target.value})}>
                     <option value="ไม่ใช่">ไม่ใช่</option>
-                    <option value="ใช่">ใช่</option>
+                    <option value="ใช่">ใช่ (ส่งผลกระทบสูง)</option>
                   </select>
                 </div>
 
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700">รายละเอียด Defect <span className="text-red-500">*</span></label>
-                   <textarea className="mt-1 block w-full rounded-md border border-gray-300 p-2" rows="2" 
+                <div className="col-span-1 md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">รายละเอียด Defect <span className="text-red-500">*</span></label>
+                   <textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" rows="3" 
                     value={formData.description} 
                     onChange={e => setFormData({...formData, description: e.target.value})} 
-                    placeholder="จำเป็นต้องกรอกรายละเอียดปัญหา..."></textarea>
+                    placeholder="ระบุรายละเอียดปัญหาที่พบอย่างชัดเจน..."></textarea>
                 </div>
 
                 {/* ส่วนอัปโหลดรูปภาพก่อนแก้ไข */}
-                <div className="col-span-2 bg-gray-50 p-4 rounded-lg border border-gray-200 mt-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">อัปโหลดรูปภาพก่อนแก้ไข (ไม่บังคับ - สามารถอัปโหลดภายหลังได้)</label>
-                  <div className="flex items-center gap-4">
+                <div className="col-span-1 md:col-span-2 bg-gray-50/50 p-5 rounded-xl border border-gray-200 mt-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">อัปโหลดรูปภาพก่อนแก้ไข <span className="text-gray-400 font-normal">(ไม่บังคับ - อัปโหลดภายหลังได้ในหน้ารายละเอียด)</span></label>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                     {formData.imgBefore ? (
-                      <div className="relative">
-                        <img src={formData.imgBefore} alt="Before" className="h-24 w-24 object-cover rounded border border-gray-300 shadow-sm bg-white" />
-                        <button onClick={() => setFormData({...formData, imgBefore: ''})} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 shadow text-xs">X</button>
+                      <div className="relative group">
+                        <img src={formData.imgBefore} alt="Before" className="h-24 w-24 object-cover rounded-lg border shadow-sm bg-white" />
+                        <button onClick={() => setFormData({...formData, imgBefore: ''})} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 shadow-md text-xs transition-transform hover:scale-110">X</button>
                       </div>
                     ) : (
-                      <div className="h-24 w-24 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 rounded bg-white text-xs">
-                         ไม่มีรูปภาพ
+                      <div className="h-24 w-24 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 rounded-lg bg-white text-xs">
+                         <span className="opacity-70">ไม่มีรูปภาพ</span>
                       </div>
                     )}
-                    <input type="file" accept="image/*" onChange={(e) => {
-                      const file = e.target.files[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onloadend = () => setFormData(prev => ({ ...prev, imgBefore: reader.result }));
-                        reader.readAsDataURL(file);
-                      }
-                    }} className="text-sm w-full max-w-xs" />
+                    <div className="flex-1 w-full">
+                       <input type="file" accept="image/*" onChange={(e) => {
+                         const file = e.target.files[0];
+                         if (file) {
+                           const reader = new FileReader();
+                           reader.onloadend = () => setFormData(prev => ({ ...prev, imgBefore: reader.result }));
+                           reader.readAsDataURL(file);
+                         }
+                       }} className="text-sm w-full file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+                    </div>
                   </div>
                 </div>
                 
                 {isVO && (
-                  <div className="col-span-2 bg-purple-50 p-4 rounded-lg border border-purple-100 mt-2">
-                    <label className="block text-sm font-medium text-purple-800">ขั้นตอนการแก้ไข (เฉพาะงาน VO) *</label>
-                    <textarea className="mt-1 block w-full rounded-md border border-purple-200 p-2" rows="2" placeholder="ระบุขั้นตอนการทำงานเพื่อประเมิน BOQ..." value={formData.voSteps} onChange={e => setFormData({...formData, voSteps: e.target.value})}></textarea>
+                  <div className="col-span-1 md:col-span-2 bg-purple-50 p-5 rounded-xl border border-purple-100 mt-2">
+                    <label className="block text-sm font-semibold text-purple-800 mb-1">ขั้นตอนการแก้ไข (เฉพาะงาน VO) <span className="text-red-500">*</span></label>
+                    <textarea className="block w-full rounded-lg border-purple-200 shadow-sm focus:border-purple-500 focus:ring-purple-500 text-sm py-2 px-3 border" rows="2" placeholder="ระบุขั้นตอนการทำงานเพื่อประเมิน BOQ..." value={formData.voSteps} onChange={e => setFormData({...formData, voSteps: e.target.value})}></textarea>
                   </div>
                 )}
               </div>
-              <div className="mt-6 flex justify-end gap-3">
-                <button onClick={() => setShowDefectForm(false)} className="px-4 py-2 border rounded-md text-gray-600 hover:bg-gray-50">ยกเลิก</button>
+              <div className="mt-8 flex justify-end gap-3 pt-4 border-t">
+                <button onClick={() => setShowDefectForm(false)} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors">ยกเลิก</button>
                 <button 
                   onClick={handleSave} 
                   disabled={isSaving || !formData.description.trim()} 
-                  className={`px-4 py-2 text-white rounded-md flex items-center transition-colors ${isSaving || !formData.description.trim() ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                  className={`px-6 py-2.5 text-white rounded-lg flex items-center transition-all shadow-md font-medium ${isSaving || !formData.description.trim() ? 'bg-gray-400 cursor-not-allowed shadow-none' : 'bg-red-500 hover:bg-red-600 shadow-red-200 hover:-translate-y-0.5'}`}>
                   {isSaving ? 'กำลังบันทึก...' : <><span className="mr-2"><IconSave/></span> บันทึก Defect</>}
                 </button>
               </div>
@@ -595,78 +686,85 @@
 
       // --- Render Views ---
       if (isLoading) {
-        return <div className="flex items-center justify-center min-h-screen text-blue-600 text-xl font-bold">กำลังโหลดข้อมูลจาก Google Sheets...</div>;
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
+            <svg className="animate-spin h-10 w-10 text-blue-600 mb-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg>
+            <div className="text-gray-600 font-medium">กำลังโหลดข้อมูลระบบ...</div>
+          </div>
+        );
       }
 
       return (
-        <div className="min-h-screen">
-          <nav className="bg-slate-900 text-white shadow-md">
+        <div className="min-h-screen pb-12">
+          <nav className="bg-slate-900 text-white shadow-md sticky top-0 z-40">
             <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-              <div className="flex items-center cursor-pointer" onClick={() => setView('JOB_LIST')}>
+              <div className="flex items-center cursor-pointer hover:text-blue-200 transition-colors" onClick={() => setView('JOB_LIST')}>
                 <IconClipboard />
-                 <span className="ml-3 font-bold text-xl">SAS Defect Management</span>
+                 <span className="ml-3 font-bold text-xl tracking-wide">SAS Defect Management</span>
               </div>
             </div>
           </nav>
 
           <main className="max-w-7xl mx-auto px-4 py-8">
            {view === 'JOB_LIST' && (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm">
-                  <h1 className="text-2xl font-bold text-gray-800">ภาพรวมใบงานหลัก (Jobs)</h1>
-                  <button onClick={() => { setEditingJob(null); setShowJobForm(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
-                    <span className="mr-1"><IconPlus /></span> สร้างใบงานหลัก
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-5 rounded-xl shadow-sm border border-gray-100 gap-4">
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-800">หน้าหลัก (Jobs)</h1>
+                    <p className="text-sm text-gray-500 mt-1">รายการใบงานหลักทั้งหมดในระบบ</p>
+                  </div>
+                  <button onClick={() => { setEditingJob(null); setShowJobForm(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center font-medium shadow-md shadow-blue-200 transition-all hover:-translate-y-0.5">
+                    <span className="mr-2"><IconPlus /></span> สร้างใบงานหลัก
                   </button>
                 </div>
-                <div className="bg-white rounded-lg shadow-sm overflow-hidden overflow-x-auto">
+                
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-gray-50/80">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job ID</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Site</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ผู้ดูแล (Owner)</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ผู้รับผิดชอบ</th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">สถานะ</th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">จำนวนใบงานย่อย</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">หมายเหตุ</th>
-                        <th className="px-6 py-3"></th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Job ID</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Site</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ผู้ดูแล (Owner)</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ผู้รับผิดชอบ</th>
+                        <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">สถานะ</th>
+                        <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Tasks</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">หมายเหตุ</th>
+                        <th className="px-6 py-4"></th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white divide-y divide-gray-100">
                       {jobs.map((job) => (
                         <tr 
                           key={job.id} 
-                          className="hover:bg-blue-50 cursor-pointer transition-colors" 
+                          className="hover:bg-blue-50/50 cursor-pointer transition-colors group" 
                           onClick={() => { setActiveJobId(job.id); setView('JOB_DETAIL'); }}
                         >
-                          <td className="px-6 py-4">
-                            <div className="font-medium text-blue-600">{job.id}</div>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="font-bold text-blue-600 group-hover:text-blue-800 transition-colors">{job.id}</div>
                             {job.replyDueDate && (
-                              <div className="text-xs text-gray-500 mt-1">Due: {job.replyDueDate}</div>
+                              <div className="text-[11px] text-gray-400 mt-1 bg-gray-100 inline-block px-2 py-0.5 rounded">Due: {job.replyDueDate}</div>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">{job.site}</td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm font-medium text-gray-900">{job.owner || '-'}</div>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">{job.site}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-800">{job.owner || '-'}</div>
                             {job.ownerCompany && (
-                              <div className="text-xs text-gray-500 mt-1">{job.ownerCompany}</div>
+                              <div className="text-[11px] text-gray-500 mt-1 truncate max-w-[120px]">{job.ownerCompany}</div>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">{job.staff || '-'}</td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`px-2.5 py-1 text-[11px] font-medium rounded-md border ${job.status === 'Active' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                               {job.status || 'รอดำเนินการ'}
-                            </span>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{job.staff || '-'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <StatusBadge status={job.status} />
                           </td>
-                          <td className="px-6 py-4 text-sm text-center">
-                            <span className="bg-gray-100 px-3 py-1 rounded-full font-bold text-xs">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                            <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-bold text-xs border">
                               {job.tasks ? job.tasks.length : 0}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-500 max-w-[150px] truncate" title={job.remark}>
                             {job.remark || '-'}
                           </td>
-                          <td className="px-6 py-4 text-right space-x-2">
+                          <td className="px-6 py-4 whitespace-nowrap text-right space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button 
                               onClick={(e) => { e.stopPropagation(); setEditingJob(job); setShowJobForm(true); }} 
                               className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors" title="ตั้งค่า/แก้ไข">
@@ -680,7 +778,7 @@
                           </td>
                         </tr>
                       ))}
-                      {jobs.length === 0 && <tr><td colSpan="8" className="px-6 py-10 text-center text-gray-500">ไม่มีข้อมูลใบงานหลัก</td></tr>}
+                      {jobs.length === 0 && <tr><td colSpan="8" className="px-6 py-12 text-center text-gray-400 bg-gray-50/50">ยังไม่มีข้อมูลใบงานหลักในระบบ</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -688,138 +786,172 @@
             )}
 
             {view === 'JOB_DETAIL' && (
-              <div className="space-y-4">
-                <div className="flex items-center text-sm text-gray-500 bg-white p-3 rounded-lg shadow-sm">
-                  <button onClick={() => setView('JOB_LIST')} className="hover:text-blue-600 flex items-center"><span className="mr-1"><IconHome/></span> หน้าแรก</button>
-                  <span className="mx-2"><IconChevronRight /></span>
-                  <span className="font-semibold text-gray-800">{activeJob?.id}</span>
+              <div className="space-y-6">
+                <div className="flex items-center text-sm text-gray-500 bg-white p-3.5 rounded-xl shadow-sm border border-gray-100">
+                  <button onClick={() => setView('JOB_LIST')} className="hover:text-blue-600 flex items-center transition-colors"><span className="mr-1.5"><IconHome/></span> หน้าหลัก</button>
+                  <span className="mx-2 text-gray-300"><IconChevronRight /></span>
+                  <span className="font-bold text-gray-800 bg-gray-100 px-2.5 py-1 rounded-md">{activeJob?.id}</span>
                 </div>
 
-                <div className="bg-white p-6 rounded-lg shadow-sm border-t-4 border-blue-600 flex justify-between items-center">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 border-t-4 border-t-blue-500 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-800">Job: {activeJob?.id}</h2>
-                    <p className="text-gray-600">{activeJob?.site} | Owner: {activeJob?.ownerCompany}</p>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-1">Job: {activeJob?.id}</h2>
+                    <div className="flex items-center text-sm text-gray-500 gap-3">
+                      <span className="flex items-center"><svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg> {activeJob?.site}</span>
+                      <span className="text-gray-300">|</span>
+                      <span>Owner: <span className="font-medium text-gray-700">{activeJob?.ownerCompany}</span></span>
+                    </div>
                   </div>
-                  <button onClick={() => setShowTaskForm(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center h-10">
-                    <span className="mr-1"><IconPlus /></span> สร้างใบงานย่อย (Task)
+                  <button onClick={() => setShowTaskForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center font-medium shadow-md shadow-blue-200 transition-all hover:-translate-y-0.5">
+                    <span className="mr-2"><IconPlus /></span> สร้างใบงานย่อย (Task)
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-6">
                   {activeJob?.tasks?.map(task => (
-                    <div key={task.id} className="bg-white rounded-lg shadow-sm p-5 border hover:shadow-md relative overflow-hidden">
-                      <div className={`absolute top-0 left-0 w-1 h-full ${task.scope === 'SAS' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
+                    <div key={task.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow relative overflow-hidden group">
+                      <div className={`absolute top-0 left-0 w-1.5 h-full ${task.scope === 'SAS' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
                       
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="font-bold text-lg">{task.id}</span>
-                        <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 text-xs font-bold rounded-full ${task.scope === 'SAS' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <span className="font-bold text-lg text-gray-800 block">{task.id}</span>
+                          <span className={`inline-block mt-1 px-2 py-0.5 text-[10px] font-bold rounded ${task.scope === 'SAS' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
                             {task.scope}
                           </span>
-                          <button onClick={(e) => handleDeleteTask(task.id, e)} className="text-gray-400 hover:text-red-600 p-1 rounded-full hover:bg-red-50 transition-colors" title="ลบใบงานย่อย">
-                             <IconTrash />
-                          </button>
                         </div>
+                        <button onClick={(e) => handleDeleteTask(task.id, e)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-md hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100" title="ลบใบงานย่อย">
+                           <IconTrash />
+                        </button>
                       </div>
 
-                      <div className="mb-4">
-                        <p className="text-sm text-gray-600 mb-2">ยูนิต: {task.building} - {task.unit}</p>
-                        <div className="flex justify-between items-center">
-                          <p className="text-sm text-gray-600">Defects: {task.defects?.length || 0} รายการ</p>
-                          <span className={`px-2.5 py-1 text-[11px] font-medium rounded-md border ${
-                            task.status === 'รอดำเนินการ' ? 'bg-amber-50 text-amber-700 border-amber-200' : 
-                            task.status === 'Active' ? 'bg-green-50 text-green-700 border-green-200' :
-                            task.status === 'เสร็จสิ้น' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                            task.status === 'Reject' ? 'bg-red-50 text-red-700 border-red-200' :
-                            'bg-gray-50 text-gray-700 border-gray-200'
-                          }`}>
-                            {task.status || 'รอดำเนินการ'}
-                          </span>
+                      <div className="space-y-3 mb-5">
+                        <div className="flex items-center text-sm text-gray-600 bg-gray-50 rounded p-2 border border-gray-100">
+                          <span className="font-semibold w-12 text-gray-500">ยูนิต:</span> 
+                          <span className="font-bold text-gray-800">{task.building} - {task.unit}</span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center px-1">
+                          <div className="text-sm">
+                            <span className="text-gray-500 mr-1">Defects:</span>
+                            <span className="font-bold text-gray-800">{task.defects?.length || 0}</span>
+                          </div>
+                          <StatusBadge status={task.status} />
                         </div>
                       </div>
   
-                      <button onClick={() => { setActiveTaskId(task.id); setView('TASK_DETAIL'); }} className="w-full py-2 bg-gray-50 hover:bg-gray-100 border rounded-md text-sm font-medium transition-colors">
-                        จัดการ Defect
+                      <button onClick={() => { setActiveTaskId(task.id); setView('TASK_DETAIL'); }} className="w-full py-2.5 bg-gray-50 hover:bg-gray-100 hover:text-blue-700 border border-gray-200 rounded-lg text-sm font-bold text-gray-700 transition-colors flex justify-center items-center">
+                        จัดการรายการ Defect <span className="ml-1 opacity-50"><IconChevronRight/></span>
                       </button>
                     </div>
                   ))}
+                  {(!activeJob?.tasks || activeJob?.tasks.length === 0) && (
+                    <div className="col-span-full py-12 text-center text-gray-400 bg-white rounded-xl border border-dashed border-gray-300">
+                      ยังไม่มีใบงานย่อยใน Job นี้
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
             {view === 'TASK_DETAIL' && (
-              <div className="space-y-4">
-                <div className="flex items-center text-sm text-gray-500 bg-white p-3 rounded-lg shadow-sm">
-                  <button onClick={() => setView('JOB_LIST')} className="hover:text-blue-600 flex items-center"><span className="mr-1"><IconHome/></span></button>
-                  <span className="mx-2"><IconChevronRight /></span>
-                  <button onClick={() => setView('JOB_DETAIL')} className="hover:text-blue-600">{activeJob?.id}</button>
-                  <span className="mx-2"><IconChevronRight /></span>
-                  <span className="font-semibold text-gray-800">{activeTask?.id}</span>
+              <div className="space-y-6">
+                <div className="flex items-center text-sm text-gray-500 bg-white p-3.5 rounded-xl shadow-sm border border-gray-100 flex-wrap gap-y-2">
+                  <button onClick={() => setView('JOB_LIST')} className="hover:text-blue-600 flex items-center transition-colors"><span className="mr-1.5"><IconHome/></span></button>
+                  <span className="mx-1 text-gray-300"><IconChevronRight /></span>
+                  <button onClick={() => setView('JOB_DETAIL')} className="hover:text-blue-600 font-medium transition-colors px-2 py-1 hover:bg-gray-50 rounded">{activeJob?.id}</button>
+                  <span className="mx-1 text-gray-300"><IconChevronRight /></span>
+                  <span className="font-bold text-gray-800 bg-gray-100 px-2.5 py-1 rounded-md">{activeTask?.id}</span>
                 </div>
                 
-                <div className={`bg-white p-6 rounded-lg shadow-sm border-t-4 ${activeTask?.scope === 'SAS' ? 'border-blue-500' : 'border-purple-500'} flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-800">Task: {activeTask?.id}</h2>
-                    <p className="text-gray-600">ยูนิต: {activeTask?.unit} | ลูกค้า: {activeTask?.customerName}</p>
-                    <p className="mt-2 text-sm">
-                      สถานะ: <span className={`px-2 py-1 rounded-md text-xs font-bold ${activeTask?.status === 'Active' ? 'bg-green-100 text-green-700' : activeTask?.status === 'Reject' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{activeTask?.status || 'รอดำเนินการ'}</span>
-                    </p>
+                <div className={`bg-white p-6 rounded-xl shadow-sm border border-gray-100 border-t-4 ${activeTask?.scope === 'SAS' ? 'border-t-blue-500' : 'border-t-purple-500'} flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5`}>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h2 className="text-2xl font-bold text-gray-800">Task: {activeTask?.id}</h2>
+                      <StatusBadge status={activeTask?.status} />
+                    </div>
+                    <div className="flex flex-wrap items-center text-sm text-gray-600 gap-x-4 gap-y-2">
+                      <span className="bg-gray-50 px-2 py-1 rounded border">ยูนิต: <strong className="text-gray-800">{activeTask?.building} - {activeTask?.unit}</strong></span>
+                      <span>ลูกค้า: <strong className="text-gray-800">{activeTask?.customerName}</strong></span>
+                    </div>
                   </div>
                   
-                  <div className="flex flex-wrap gap-2">
-                    {/* ปุ่ม เปิดใบงาน และ Reject (Phase 2) */}
-                    {(activeTask?.status === 'รอดำเนินการ' || !activeTask?.status) && (
-                      <>
-                        <button onClick={() => handleUpdateTaskStatus(activeTask.id, 'Active')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center text-sm font-medium shadow-sm">
-                          เปิดใบงาน
-                        </button>
-                        {activeTask?.scope === 'VO' && (
-                          <button onClick={() => handleUpdateTaskStatus(activeTask.id, 'Reject')} className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center text-sm font-medium shadow-sm">
-                            Reject
+                  <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full lg:w-auto p-4 lg:p-0 bg-gray-50 lg:bg-transparent rounded-lg border lg:border-0 border-gray-200">
+                    {/* --- กลุ่มจัดการสถานะใบงาน --- */}
+                    <div className="flex gap-2 w-full sm:w-auto border-b sm:border-b-0 sm:border-r border-gray-200 pb-3 sm:pb-0 sm:pr-4">
+                      {(activeTask?.status === 'รอดำเนินการ' || !activeTask?.status) && (
+                        <>
+                          <button onClick={() => handleUpdateTaskStatus(activeTask.id, 'Active')} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex justify-center items-center text-sm font-medium shadow-sm transition-colors">
+                            เปิดใบงาน
                           </button>
-                        )}
-                      </>
-                    )}
+                          {activeTask?.scope === 'VO' && (
+                            <button onClick={() => handleUpdateTaskStatus(activeTask.id, 'Reject')} className="flex-1 sm:flex-none bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex justify-center items-center text-sm font-medium shadow-sm transition-colors">
+                              Reject
+                            </button>
+                          )}
+                        </>
+                      )}
 
-                    {/* ปุ่มเพิ่ม Defect จะถูกปิดไว้เมื่อสถานะคือ Reject */}
+                      {/* ปุ่มปิดใบงาน (Closed) */}
+                      {activeTask?.status === 'Active' && (
+                        <button 
+                          onClick={() => handleUpdateTaskStatus(activeTask.id, 'Closed')} 
+                          disabled={!(activeTask?.defects?.length > 0 && activeTask.defects.every(d => d.status === 'แก้ไขแล้ว'))}
+                          className={`flex-1 sm:flex-none px-4 py-2 rounded-lg flex justify-center items-center text-sm font-bold shadow-sm text-white transition-all ${(activeTask?.defects?.length > 0 && activeTask.defects.every(d => d.status === 'แก้ไขแล้ว')) ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 hover:-translate-y-0.5' : 'bg-gray-300 cursor-not-allowed shadow-none'}`}
+                          title={!(activeTask?.defects?.length > 0 && activeTask.defects.every(d => d.status === 'แก้ไขแล้ว')) ? 'ต้องเพิ่ม Defect อย่างน้อย 1 รายการ และแก้ไขให้เสร็จสิ้นทั้งหมดก่อนปิดใบงาน' : 'กดเพื่อปิดใบงาน (Closed)'}
+                        >
+                          ปิดใบงาน (Closed)
+                        </button>
+                      )}
+                      
+                      {activeTask?.status === 'Closed' && (
+                        <div className="flex items-center text-emerald-600 font-bold px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-200">
+                          <IconCheckCircle /> <span className="ml-1">ใบงานนี้ถูกปิดแล้ว</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* --- กลุ่มเพิ่มข้อมูล --- */}
                     <button 
                       onClick={() => setShowDefectForm(true)} 
-                      disabled={activeTask?.status === 'Reject'}
-                      className={`text-white px-4 py-2 rounded-lg flex items-center text-sm font-medium shadow-sm ${activeTask?.status === 'Reject' ? 'bg-gray-300 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'}`}>
+                      disabled={activeTask?.status === 'Reject' || activeTask?.status === 'Closed'}
+                      className={`w-full sm:w-auto px-4 py-2 rounded-lg flex justify-center items-center text-sm font-medium shadow-sm transition-all ${(activeTask?.status === 'Reject' || activeTask?.status === 'Closed') ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600 text-white shadow-red-200 hover:-translate-y-0.5'}`}>
                       <span className="mr-1"><IconPlus /></span> เพิ่ม Defect
                     </button>
                   </div>
                 </div>
                 
-                <div className="bg-white rounded-lg shadow-sm mt-6 overflow-hidden overflow-x-auto">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 mt-6 overflow-hidden overflow-x-auto">
+                  <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                    <h3 className="font-bold text-gray-700">รายการ Defect ({activeTask?.defects?.length || 0})</h3>
+                  </div>
                   <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-white">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Defect ID</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">หมวดหมู่</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">รายละเอียด</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">สถานะ</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Defect ID</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">หมวดหมู่</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">รายละเอียด</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">สถานะ</th>
                         <th className="px-6 py-3"></th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white divide-y divide-gray-100">
                       {activeTask?.defects?.map((defect) => (
-                        <tr key={defect.id} className="hover:bg-blue-50 cursor-pointer transition-colors" onClick={() => { setActiveDefectId(defect.id); setView('DEFECT_DETAIL'); }}>
-                          <td className="px-6 py-4 text-sm font-medium text-blue-600">{defect.id}</td>
+                        <tr key={defect.id} className="hover:bg-blue-50/50 cursor-pointer transition-colors group" onClick={() => { setActiveDefectId(defect.id); setView('DEFECT_DETAIL'); }}>
+                          <td className="px-6 py-4 text-sm font-bold text-blue-600 group-hover:text-blue-800">{defect.id}</td>
                           <td className="px-6 py-4 text-sm">
-                            <div className="font-semibold">{defect.mainCategory}</div>
-                            <div className="text-xs text-gray-500">{defect.subCategory}</div>
+                            <div className="font-bold text-gray-800">{defect.mainCategory}</div>
+                            <div className="text-[11px] text-gray-500 mt-0.5 bg-gray-100 inline-block px-1.5 py-0.5 rounded">{defect.subCategory}</div>
                           </td>
-                          <td className="px-6 py-4 text-sm max-w-xs truncate">{defect.description}</td>
-                          <td className="px-6 py-4 text-sm flex gap-2">
-                             <span className="px-2 py-1 bg-gray-100 rounded-full text-xs font-bold">{defect.status}</span>
-                             {defect.major === 'ใช่' && <span className="px-2 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">Major</span>}
+                          <td className="px-6 py-4 text-sm max-w-[200px] truncate text-gray-600" title={defect.description}>{defect.description}</td>
+                          <td className="px-6 py-4 text-sm flex items-center gap-2">
+                             <StatusBadge status={defect.status} />
+                             {defect.major === 'ใช่' && <span className="px-2 py-1 bg-red-50 text-red-600 border border-red-200 rounded-md text-[11px] font-bold shadow-sm">Major</span>}
                           </td>
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-6 py-4 text-right opacity-0 group-hover:opacity-100 transition-opacity">
                             <button 
                               onClick={(e) => handleDeleteDefect(defect.id, e)} 
-                              disabled={activeTask?.status === 'Reject'}
-                              className={`p-2 rounded-full transition-colors ${activeTask?.status === 'Reject' ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600 hover:bg-red-100'}`} 
+                              disabled={activeTask?.status === 'Reject' || activeTask?.status === 'Closed'}
+                              className={`p-2 rounded-full transition-colors ${(activeTask?.status === 'Reject' || activeTask?.status === 'Closed') ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`} 
                               title="ลบรายการ Defect">
                               <IconTrash />
                             </button>   
@@ -827,7 +959,7 @@
                         </tr>
                       ))}
                       {(!activeTask?.defects || activeTask?.defects.length === 0) && (
-                        <tr><td colSpan="5" className="px-6 py-10 text-center text-gray-500">ไม่มีรายการ Defect</td></tr>
+                        <tr><td colSpan="5" className="px-6 py-12 text-center text-gray-400 bg-gray-50/50">ยังไม่มีรายการ Defect ในใบงานนี้</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -836,29 +968,43 @@
             )}
 
             {view === 'DEFECT_DETAIL' && (
-              <div className="space-y-4">
-                <div className="flex items-center text-sm text-gray-500 bg-white p-3 rounded-lg shadow-sm">
-                  <button onClick={() => setView('JOB_LIST')} className="hover:text-blue-600 flex items-center"><span className="mr-1"><IconHome/></span></button>
-                  <span className="mx-2"><IconChevronRight /></span>
-                  <button onClick={() => setView('JOB_DETAIL')} className="hover:text-blue-600">{activeJob?.id}</button>
-                  <span className="mx-2"><IconChevronRight /></span>
-                  <button onClick={() => setView('TASK_DETAIL')} className="hover:text-blue-600">{activeTask?.id}</button>
-                  <span className="mx-2"><IconChevronRight /></span>
-                  <span className="font-semibold text-gray-800">{activeDefect?.id}</span>
+              <div className="space-y-6">
+                <div className="flex items-center text-sm text-gray-500 bg-white p-3.5 rounded-xl shadow-sm border border-gray-100 flex-wrap gap-y-2">
+                  <button onClick={() => setView('JOB_LIST')} className="hover:text-blue-600 flex items-center transition-colors"><span className="mr-1.5"><IconHome/></span></button>
+                  <span className="mx-1 text-gray-300"><IconChevronRight /></span>
+                  <button onClick={() => setView('JOB_DETAIL')} className="hover:text-blue-600 font-medium transition-colors px-2 py-1 hover:bg-gray-50 rounded">{activeJob?.id}</button>
+                  <span className="mx-1 text-gray-300"><IconChevronRight /></span>
+                  <button onClick={() => setView('TASK_DETAIL')} className="hover:text-blue-600 font-medium transition-colors px-2 py-1 hover:bg-gray-50 rounded">{activeTask?.id}</button>
+                  <span className="mx-1 text-gray-300"><IconChevronRight /></span>
+                  <span className="font-bold text-gray-800 bg-gray-100 px-2.5 py-1 rounded-md">{activeDefect?.id}</span>
                 </div>
 
-                <div className="bg-white p-6 rounded-lg shadow-sm border-t-4 border-red-500">
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4">ข้อมูล Defect: {activeDefect?.id}</h2>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <p><strong>ลักษณะงาน:</strong> {activeDefect?.mainCategory} - {activeDefect?.subCategory}</p>
-                    <p><strong>ทีมเข้าแก้ไข:</strong> {activeDefect?.team}</p>
-                    <p><strong>Major:</strong> <span className={activeDefect?.major === 'ใช่' ? "text-red-600 font-bold" : ""}>{activeDefect?.major || 'ไม่ใช่'}</span></p>
-                    <p><strong>สถานะ:</strong> {activeDefect?.status}</p>
-                    <p className="col-span-2 bg-gray-50 p-3 rounded border"><strong>รายละเอียด:</strong> {activeDefect?.description}</p>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-red-500">
+                  <div className="flex justify-between items-start mb-5 pb-4 border-b">
+                    <h2 className="text-2xl font-bold text-gray-800">ข้อมูล Defect: {activeDefect?.id}</h2>
+                    <StatusBadge status={activeDefect?.status} />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                    <div className="flex border-b border-gray-50 pb-2">
+                      <span className="w-28 text-gray-500">ลักษณะงาน:</span> 
+                      <span className="font-semibold text-gray-800">{activeDefect?.mainCategory} <span className="text-gray-300 mx-1">/</span> {activeDefect?.subCategory}</span>
+                    </div>
+                    <div className="flex border-b border-gray-50 pb-2">
+                      <span className="w-28 text-gray-500">ทีมเข้าแก้ไข:</span> 
+                      <span className="font-semibold text-gray-800">{activeDefect?.team}</span>
+                    </div>
+                    <div className="flex border-b border-gray-50 pb-2">
+                      <span className="w-28 text-gray-500">Major:</span> 
+                      <span className={activeDefect?.major === 'ใช่' ? "text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded" : "font-semibold"}>{activeDefect?.major || 'ไม่ใช่'}</span>
+                    </div>
+                    <div className="col-span-1 md:col-span-2 mt-2">
+                      <span className="block text-gray-500 mb-1">รายละเอียดปัญหา:</span>
+                      <p className="bg-gray-50/80 p-4 rounded-lg border border-gray-100 text-gray-800 whitespace-pre-line">{activeDefect?.description}</p>
+                    </div>
                   </div>
                 </div>
 
-                {/* ส่ง props taskStatus เข้าไปเพื่อให้เช็คสิทธิ์การ Upload ภาพ */}
+                {/* อัปโหลดภาพ ส่ง status ไปเช็คสิทธิ์ (รวมถึง closed ด้วย) */}
                 <DefectImagesUploader defect={activeDefect} taskStatus={activeTask?.status} onSuccess={fetchData} />
               </div>
             )}
@@ -866,10 +1012,10 @@
           </main>
 
           {isDeleting && (
-            <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[100]">
-              <div className="bg-white px-6 py-4 rounded-lg shadow-lg font-bold text-red-600 flex items-center gap-3">
-                <svg className="animate-spin h-5 w-5 text-red-600" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg>
-                กำลังลบข้อมูล...
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100]">
+              <div className="bg-white px-8 py-5 rounded-xl shadow-2xl font-bold text-red-600 flex items-center gap-4 border border-red-100">
+                <svg className="animate-spin h-6 w-6 text-red-600" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg>
+                กำลังลบข้อมูลออกจากระบบ...
               </div>
             </div>
           )}
