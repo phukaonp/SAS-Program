@@ -69,7 +69,10 @@ function getAllData() {
           remark: def.Remark || def['หมายเหตุ'] || ''
         }));
 
-      return {
+      // ใน Code.gs ฟังก์ชัน getAllData() ประมาณบรรทัด 55-65
+
+    return {
+
         id: task.TaskID,
         scope: task.Scope,
         building: task.Building,
@@ -84,7 +87,7 @@ function getAllData() {
         defects: taskDefects
       };
     });
-
+     
     return {
       id: job.JobID,
       site: job.Site,
@@ -355,4 +358,45 @@ function deleteDefect(defectId) {
     }
   }
   throw new Error("ไม่พบ DefectID ที่ต้องการลบ");
+}
+
+// --- เพิ่มฟังก์ชันใหม่สำหรับการเปลี่ยนสถานะ (Phase 2) ---
+function updateTaskStatusAndJob(taskId, newStatus) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const taskSheet = ss.getSheetByName('TASK');
+  const taskData = taskSheet.getDataRange().getValues();
+  
+  let jobId = '';
+  let taskRowIndex = -1;
+  
+  for (let i = 1; i < taskData.length; i++) {
+    if (taskData[i][0] === taskId) {
+      taskRowIndex = i + 1;
+      jobId = taskData[i][1]; // ดึง JobID ในคอลัมน์ B
+      break;
+    }
+  }
+  
+  if (taskRowIndex !== -1) {
+    // 1. อัปเดตสถานะของ Task ในคอลัมน์ F (Index 5)
+    taskSheet.getRange(taskRowIndex, 6).setValue(newStatus);
+    
+    // 2. เงื่อนไข: ถ้า Task เปลี่ยนเป็น 'Active' ให้เปลี่ยนสถานะ Job หลักเป็น 'Active' ด้วย
+    if (newStatus === 'Active' && jobId) {
+       const jobSheet = ss.getSheetByName('JOB');
+       const jobData = jobSheet.getDataRange().getValues();
+       
+       for (let j = 1; j < jobData.length; j++) {
+         if (jobData[j][0] === jobId) {
+           // ตรวจสอบถ้าสถานะ Job เดิมยังเป็น "รอดำเนินการ" ให้เปลี่ยนเป็น "Active" (คอลัมน์ I Index 8)
+           if (jobData[j][8] === 'รอดำเนินการ') { 
+             jobSheet.getRange(j + 1, 9).setValue('Active');
+           }
+           break;
+         }
+       }
+    }
+    return "Success";
+  }
+  throw new Error("ไม่พบข้อมูลใบงานย่อยที่ต้องการเปลี่ยนสถานะ");
 }
