@@ -170,7 +170,7 @@ function addDefect(taskId, defectData) {
       const folder = DriveApp.getFolderById(IMAGE_FOLDER_ID);
       const file = folder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      return file.getUrl();
+      return "https://drive.google.com/uc?export=view&id=" + file.getId();
     } catch (e) {
       return '';
     }
@@ -351,7 +351,7 @@ function updateTaskStatusAndJob(taskId, newStatus) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const taskSheet = ss.getSheetByName('TASK');
   const taskData = taskSheet.getDataRange().getValues();
-  
+
   let jobId = '';
   let taskRowIndex = -1;
 
@@ -359,6 +359,7 @@ function updateTaskStatusAndJob(taskId, newStatus) {
     if (taskData[i][0] === taskId) {
       taskRowIndex = i + 1;
       jobId = taskData[i][1]; // ดึง JobID ในคอลัมน์ B (Index 1)
+      taskData[i][5] = newStatus; // อัปเดตสถานะจำลองใน Array เพื่อใช้เช็คเงื่อนไขทันที
       break;
     }
   }
@@ -367,25 +368,47 @@ function updateTaskStatusAndJob(taskId, newStatus) {
     // 1. อัปเดตสถานะของ Task ในคอลัมน์ F (ตำแหน่งที่ 6)
     taskSheet.getRange(taskRowIndex, 6).setValue(newStatus);
 
-    // 2. เงื่อนไข: ถ้า Task เปลี่ยนเป็น 'Active' ให้เปลี่ยนสถานะ Job หลักเป็น 'Active' ด้วย
-    if (newStatus === 'Active' && jobId) {
+    // 2. เงื่อนไขอัปเดต Job หลัก
+    if (jobId) {
        const jobSheet = ss.getSheetByName('JOB');
        const jobData = jobSheet.getDataRange().getValues();
        
+       // เช็คสถานะของทุกใบงานย่อยภายใต้ Job เดียวกัน
+       let allTasksFinished = true;
+       for (let i = 1; i < taskData.length; i++) {
+         if (taskData[i][1] === jobId) {
+           const status = taskData[i][5];
+           // ถ้ายังมีงานที่ 'รอดำเนินการ', 'Active' หรือไม่มีสถานะ ถือว่างานหลักยังไม่จบ
+           if (status === 'รอดำเนินการ' || status === 'Active' || status === '') {
+             allTasksFinished = false;
+             break;
+           }
+         }
+       }
+
+       let jobRowIndex = -1;
        for (let j = 1; j < jobData.length; j++) {
          if (jobData[j][0] === jobId) {
-           // คอลัมน์ I คือตำแหน่งที่ 9 (Index 8)
-           if (jobData[j][8] !== 'Active') { 
-             jobSheet.getRange(j + 1, 9).setValue('Active');
-           }
+           jobRowIndex = j + 1;
            break;
+         }
+       }
+
+       if (jobRowIndex !== -1) {
+         if (allTasksFinished) {
+           // เงื่อนไขใหม่: ถ้าทุกใบงานย่อยไม่มี รอดำเนินการ/Active แล้ว ให้ปิดใบงานหลัก
+           jobSheet.getRange(jobRowIndex, 9).setValue('Closed');
+         } else if (newStatus === 'Active') {
+           // เงื่อนไขเดิม: ถ้ามีการเปลี่ยน Task เป็น Active ให้ Job หลักเป็น Active
+           if (jobData[jobRowIndex - 1][8] !== 'Active') { 
+             jobSheet.getRange(jobRowIndex, 9).setValue('Active');
+           }
          }
        }
     }
     
-    // บังคับบันทึกข้อมูลทันทีก่อนแจ้ง Frontend ว่าสำเร็จ เพื่อให้ดึงข้อมูลใหม่ได้ถูกต้อง
-    SpreadsheetApp.flush(); 
-    
+    // บังคับบันทึกข้อมูลทันทีก่อนแจ้ง Frontend ว่าสำเร็จ
+    SpreadsheetApp.flush();
     return "Success";
   }
   throw new Error("ไม่พบข้อมูลใบงานย่อยที่ต้องการเปลี่ยนสถานะ");
@@ -425,7 +448,7 @@ function uploadSingleDefectImage(defectId, field, base64Str) {
     
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     
-    const url = file.getUrl();
+    const url = "https://drive.google.com/uc?export=view&id=" + file.getId();
     
     const colMap = { 'imgUnit': 11, 'imgBefore': 12, 'imgDuring': 13, 'imgAfter': 14 };
     if (colMap[field]) {
