@@ -33,7 +33,7 @@ function initSheets() {
 function getAllData() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   
-  // ฟังก์ชันย่อยสำหรับแปลงข้อมูลจาก Sheet เป็น Object (แก้ให้ถูกต้อง)
+  // ฟังก์ชันย่อยสำหรับแปลงข้อมูลจาก Sheet เป็น Object
   const getSheetData = (sheetName) => {
     const sheet = ss.getSheetByName(sheetName);
     if (!sheet) return [];
@@ -67,17 +67,14 @@ function getAllData() {
           imgAfter: def.ImgAfter || def['รูปภาพหลังแก้ไข'],
           status: def.Status || def['DefectStatus'] || def['สถานะ defect'],
           remark: def.Remark || def['หมายเหตุ'] || ''
-        }));
+      }));
 
-      // ใน Code.gs ฟังก์ชัน getAllData() ประมาณบรรทัด 55-65
-
-    return {
-
+      return {
         id: task.TaskID,
         scope: task.Scope,
         building: task.Building,
         unit: task.Unit,
-        status: task.Status,
+        status: task.Status || task['TaskStatus'] || task['สถานะ'] || task['สถานะใบงาน'] || 'รอดำเนินการ',
         customerName: task.CustomerName,
         targetFixDate: task.TargetFixDate,
         actualStartDate: task.ActualStartDate,
@@ -87,7 +84,7 @@ function getAllData() {
         defects: taskDefects
       };
     });
-     
+      
     return {
       id: job.JobID,
       site: job.Site,
@@ -96,7 +93,7 @@ function getAllData() {
       staff: job.Staff,
       replyDueDate: job.ReplyDueDate,
       remark: job.Remark,
-      status: job.Status || 'รอดำเนินการ', // ดึงข้อมูลสถานะ
+      status: job.Status || job['JobStatus'] || job['สถานะ'] || job['สถานะใบงานหลัก'] || 'รอดำเนินการ',
       tasks: jobTasks
     };
   });
@@ -118,7 +115,7 @@ function addJob(formData) {
     formData.replyDueDate || '',  // Col F
     formData.remark || '',        // Col G
     new Date(),                   // Col H: Timestamp
-    'รอดำเนินการ'                   // Col I: เพิ่ม Status ตามเงื่อนไข
+    'รอดำเนินการ'                   // Col I: Status
   ]);
   return newId;
 }
@@ -127,52 +124,41 @@ function addTask(jobId, formData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('TASK');
   
-  // สร้าง Task ID ใหม่
   const newId = 'TSK-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
-  
-  // จัดรูปแบบวัน-เวลาสำหรับบันทึกประวัติ (Column K)
   const historyLog = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy, HH:mm:ss');
   
-  // คำนวณ Duration (Col I) = กำหนดวันเข้าแก้ไข (Col H) + 14 วัน
   let durationDate = '';
   if (formData.targetFixDate) {
-    // แยกวันที่ ปี-เดือน-วัน เพื่อป้องกันปัญหา Timezone คลาดเคลื่อน
     const parts = formData.targetFixDate.split('-'); 
     if (parts.length === 3) {
-      // สร้าง Date Object และบวกเพิ่ม 14 วัน
       const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
       dateObj.setDate(dateObj.getDate() + 14);
-      
-      // จัดฟอร์แมตวันที่ (คุณสามารถเปลี่ยน 'yyyy-MM-dd' เป็น 'dd/MM/yyyy' ได้ตามต้องการ)
       durationDate = Utilities.formatDate(dateObj, Session.getScriptTimeZone(), 'yyyy-MM-dd'); 
     }
   }
 
-  // เพิ่มข้อมูลลงใน Sheet โดยเรียงลำดับให้ตรงกับ Column A - K
   sheet.appendRow([
     newId,                        // Col A: TaskID
     jobId,                        // Col B: JobID
     formData.scope || 'SAS',      // Col C: Scope
     formData.building || '',      // Col D: Building
     formData.unit || '',          // Col E: Unit
-    'รอดำเนินการ',                  // Col F: TaskStatus
+    'รอดำเนินการ',                  // Col F: Status
     formData.customerName || '',  // Col G: ชื่อลูกค้า
     formData.targetFixDate || '', // Col H: กำหนดวันเข้าแก้ไข
-    durationDate,                 // Col I: Duration (วันที่เข้าแก้ไข + 14 วัน)
+    durationDate,                 // Col I: Duration
     formData.remark || '',        // Col J: รายละเอียด
-    historyLog                    // Col K: ประวัติ (เวลาที่สร้าง Task)
+    historyLog                    // Col K: ประวัติ
   ]);
   
   return newId;
 }
 
-// อัปเดตฟังก์ชันสร้าง Defect ให้รองรับอัปโหลดรูปภาพ 1 รูปตอนสร้าง
 function addDefect(taskId, defectData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('DEFECT');
   const newId = 'DEF-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
 
-  // ฟังก์ชันช่วยอัปโหลดรูปภาพลง Google Drive
   function uploadBase64(base64Str, filename) {
     if (!base64Str) return '';
     try {
@@ -188,23 +174,21 @@ function addDefect(taskId, defectData) {
     }
   }
 
-  // ตรวจสอบว่ามีการแนบรูปก่อนแก้ไขมาด้วยหรือไม่
   let imgBeforeUrl = '';
   if (defectData.imgBefore) {
     const ts = new Date().getTime();
     imgBeforeUrl = uploadBase64(defectData.imgBefore, `Before_${newId}_${ts}`);
   }
 
-  // สร้าง Array ขนาด 15 ช่อง (Index 0 ถึง 14)
   const rowData = new Array(15).fill('');
   
   rowData[0] = newId;                        // Col A: DefectID
   rowData[1] = taskId;                       // Col B: TaskID
-  rowData[4] = 'ยังไม่แก้ไข';                  // Col E: สถานะ defect (DefectStatus)
+  rowData[4] = 'ยังไม่แก้ไข';                  // Col E: Status
   rowData[5] = defectData.mainCategory;      // Col F: ลักษณะงานหลัก
   rowData[6] = defectData.subCategory;       // Col G: ลักษณะงานรอง
   rowData[7] = defectData.description;       // Col H: รายละเอียด
-  rowData[8] = defectData.major;             // Col I: Major (ใช่/ไม่ใช่)
+  rowData[8] = defectData.major;             // Col I: Major
   rowData[9] = defectData.team;              // Col J: ทีมเข้าแก้ไข
   rowData[10] = '';                          // Col K: รูปภาพเลขยูนิต
   rowData[11] = imgBeforeUrl;                // Col L: รูปภาพก่อนแก้ไข
@@ -216,7 +200,6 @@ function addDefect(taskId, defectData) {
   return newId;
 }
 
-// 4. บันทึกรูปภาพ 4 รูป
 function uploadDefectImages(defectId, imagesPayload) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('DEFECT');
@@ -233,7 +216,7 @@ function uploadDefectImages(defectId, imagesPayload) {
 
   function uploadBase64(base64Str, filename) {
     if (!base64Str) return '';
-    if (base64Str.startsWith('http')) return base64Str; // กรณีเป็น URL เดิมอยู่แล้ว
+    if (base64Str.startsWith('http')) return base64Str; 
     try {
       const splitBase = base64Str.split(',');
       const contentType = splitBase[0].split(';')[0].replace('data:', '');
@@ -360,7 +343,7 @@ function deleteDefect(defectId) {
   throw new Error("ไม่พบ DefectID ที่ต้องการลบ");
 }
 
-// --- เพิ่มฟังก์ชันใหม่สำหรับการเปลี่ยนสถานะ (Phase 2) ---
+// --- ฟังก์ชันเปลี่ยนสถานะ ---
 function updateTaskStatusAndJob(taskId, newStatus) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const taskSheet = ss.getSheetByName('TASK');
@@ -368,19 +351,19 @@ function updateTaskStatusAndJob(taskId, newStatus) {
   
   let jobId = '';
   let taskRowIndex = -1;
-  
+
   for (let i = 1; i < taskData.length; i++) {
     if (taskData[i][0] === taskId) {
       taskRowIndex = i + 1;
-      jobId = taskData[i][1]; // ดึง JobID ในคอลัมน์ B
+      jobId = taskData[i][1]; // ดึง JobID ในคอลัมน์ B (Index 1)
       break;
     }
   }
   
   if (taskRowIndex !== -1) {
-    // 1. อัปเดตสถานะของ Task ในคอลัมน์ F (Index 5)
+    // 1. อัปเดตสถานะของ Task ในคอลัมน์ F (ตำแหน่งที่ 6)
     taskSheet.getRange(taskRowIndex, 6).setValue(newStatus);
-    
+
     // 2. เงื่อนไข: ถ้า Task เปลี่ยนเป็น 'Active' ให้เปลี่ยนสถานะ Job หลักเป็น 'Active' ด้วย
     if (newStatus === 'Active' && jobId) {
        const jobSheet = ss.getSheetByName('JOB');
@@ -388,14 +371,18 @@ function updateTaskStatusAndJob(taskId, newStatus) {
        
        for (let j = 1; j < jobData.length; j++) {
          if (jobData[j][0] === jobId) {
-           // ตรวจสอบถ้าสถานะ Job เดิมยังเป็น "รอดำเนินการ" ให้เปลี่ยนเป็น "Active" (คอลัมน์ I Index 8)
-           if (jobData[j][8] === 'รอดำเนินการ') { 
+           // คอลัมน์ I คือตำแหน่งที่ 9 (Index 8)
+           if (jobData[j][8] !== 'Active') { 
              jobSheet.getRange(j + 1, 9).setValue('Active');
            }
            break;
          }
        }
     }
+    
+    // บังคับบันทึกข้อมูลทันทีก่อนแจ้ง Frontend ว่าสำเร็จ เพื่อให้ดึงข้อมูลใหม่ได้ถูกต้อง
+    SpreadsheetApp.flush(); 
+    
     return "Success";
   }
   throw new Error("ไม่พบข้อมูลใบงานย่อยที่ต้องการเปลี่ยนสถานะ");
