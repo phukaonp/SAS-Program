@@ -12,7 +12,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     // --- Mock Data Options ---
     const STAFFS = ['ณภัทร ปรีชาวุฒิวงศ์', 'ณเดช คูกิมิยะ', 'USER_CURRENT'];
@@ -48,6 +48,129 @@
       return <span className={`px-2.5 py-1 text-[11px] font-bold rounded-md border ${colorClass}`}>{status || 'ไม่มีสถานะ'}</span>;
     };
 
+    // --- Component จัดการรูปภาพ (วาด + ใส่ลายน้ำ พิกัด & เวลา) ---
+    const ImageAnnotator = ({ imageSrc, field, onSave, onClose }) => {
+      const canvasRef = useRef(null);
+      const [isDrawing, setIsDrawing] = useState(false);
+      const [location, setLocation] = useState('กำลังหาพิกัด...');
+
+      useEffect(() => {
+        // 1. ดึงพิกัด Location
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => setLocation(`Lat: ${pos.coords.latitude.toFixed(5)}, Lng: ${pos.coords.longitude.toFixed(5)}`),
+            (err) => setLocation('Location: ไม่สามารถดึงพิกัดได้')
+          );
+        } else {
+          setLocation('Location: ไม่รองรับการดึงพิกัด');
+        }
+
+        // 2. โหลดรูปภาพลง Canvas และใส่ลายน้ำ
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.onload = () => {
+          // คำนวณขนาด (ย่อรูปถ้าใหญ่เกินไปเพื่อไม่ให้ไฟล์หนัก)
+          const MAX_WIDTH = 1200;
+          let width = img.width;
+          let height = img.height;
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
+          canvas.width = width;
+          canvas.height = height;
+          
+          // วาดรูปลง Canvas
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // ใส่ลายน้ำ (Timestamp + Location)
+          const timestamp = new Date().toLocaleString('th-TH');
+          const watermarkText = `${timestamp} | ${location}`;
+          
+          ctx.font = `bold ${Math.max(16, width * 0.03)}px Sarabun, sans-serif`;
+          ctx.fillStyle = 'yellow';
+          ctx.strokeStyle = 'black';
+          ctx.lineWidth = 3;
+          ctx.textBaseline = 'bottom';
+          ctx.textAlign = 'right';
+          
+          // วาดขอบดำและตัวหนังสือสีเหลืองที่มุมขวาล่าง
+          ctx.strokeText(watermarkText, width - 20, height - 20);
+          ctx.fillText(watermarkText, width - 20, height - 20);
+          
+          // ตั้งค่าสำหรับปากกาวาด (Annotate)
+          ctx.strokeStyle = 'red';
+          ctx.lineWidth = Math.max(3, width * 0.005);
+          ctx.lineCap = 'round';
+        };
+        img.src = imageSrc;
+      }, [imageSrc, location]);
+
+      // ฟังก์ชันวาดเส้น
+      const startDrawing = (e) => {
+        setIsDrawing(true);
+        draw(e);
+      };
+      
+      const finishDrawing = () => {
+        setIsDrawing(false);
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.beginPath();
+      };
+      
+      const draw = (e) => {
+        if (!isDrawing) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        
+        // รองรับทั้ง Mouse และ Touch
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (clientX - rect.left) * scaleX;
+        const y = (clientY - rect.top) * scaleY;
+
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+      };
+
+      const handleSave = () => {
+        const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.8); // เซฟเป็น Base64
+        onSave(field, dataUrl);
+      };
+
+      return (
+        <div className="fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-4">
+          <div className="text-white mb-2 flex justify-between w-full max-w-2xl">
+            <span className="font-bold">ใช้นิ้ววาดเพื่อเน้นจุด (Annotate)</span>
+            <button onClick={onClose} className="text-red-400 hover:text-red-300"><IconX /></button>
+          </div>
+          
+          <div className="relative border-2 border-gray-600 bg-gray-900 overflow-hidden w-full max-w-2xl" style={{ maxHeight: '70vh' }}>
+            <canvas 
+              ref={canvasRef}
+              onMouseDown={startDrawing} onMouseUp={finishDrawing} onMouseMove={draw} onMouseLeave={finishDrawing}
+              onTouchStart={startDrawing} onTouchEnd={finishDrawing} onTouchMove={draw}
+              className="w-full h-auto touch-none cursor-crosshair"
+            />
+          </div>
+          
+          <div className="flex gap-4 mt-6 w-full max-w-2xl">
+            <button onClick={onClose} className="flex-1 py-3 bg-gray-700 text-white rounded-lg font-bold">ยกเลิก</button>
+            <button onClick={handleSave} className="flex-1 py-3 bg-emerald-600 text-white rounded-lg font-bold flex items-center justify-center">
+              <span className="mr-2"><IconCheckCircle/></span> ยืนยันและนำไปใช้
+            </button>
+          </div>
+        </div>
+      );
+    };
+
     // --- Component จัดการอัปโหลดรูป ---
     const DefectImagesUploader = ({ defect, taskStatus, onSuccess }) => {
       const [images, setImages] = useState({
@@ -58,6 +181,7 @@
       });
       const [uploadingField, setUploadingField] = useState(null);
       const [isSavingStatus, setIsSavingStatus] = useState(false);
+      const [editingImage, setEditingImage] = useState(null);
 
       const isTaskActive = taskStatus === 'Active';
       const isTaskRejected = taskStatus === 'Reject';
@@ -69,10 +193,17 @@
         if (file) {
           const reader = new FileReader();
           reader.onloadend = () => {
-            setImages(prev => ({ ...prev, [field]: reader.result }));
+            // โยนเข้า State เพื่อเปิดหน้า Modal วาดรูป
+            setEditingImage({ field: field, src: reader.result });
           };
           reader.readAsDataURL(file);
         }
+      };
+
+      // ฟังก์ชันรับรูปภาพที่วาด/ใส่ลายน้ำเสร็จแล้ว
+      const handleAnnotatorSave = (field, dataUrl) => {
+        setImages(prev => ({ ...prev, [field]: dataUrl }));
+        setEditingImage(null); // ปิดหน้าต่าง
       };
 
       const handleUploadSingle = (field) => {
@@ -152,6 +283,7 @@
               <input 
                 type="file" 
                 accept="image/*" 
+                capture="environment" 
                 onChange={(e) => handleFileChange(field, e)} 
                 disabled={isDisabled || isTaskRejected || isDefectFixed || isTaskClosed} 
                 className={`text-xs w-full disabled:opacity-50 cursor-pointer file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 ${(isTaskRejected || isDefectFixed || isTaskClosed) ? 'hidden' : ''}`} 
@@ -179,6 +311,18 @@
 
       return (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mt-4">
+          
+          {/* ----- ส่วนเปิดหน้าต่าง Annotator ----- */}
+          {editingImage && (
+            <ImageAnnotator 
+              imageSrc={editingImage.src} 
+              field={editingImage.field} 
+              onSave={handleAnnotatorSave} 
+              onClose={() => setEditingImage(null)} 
+            />
+          )}
+          {/* ---------------------------------- */}
+
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-3">
             <div>
               <h3 className="text-xl font-bold text-gray-800">จัดการรูปภาพ (4 รูป)</h3>
@@ -389,7 +533,7 @@
         google.script.run
           .withSuccessHandler((res) => {
             setIsExportingPDF(false);
-            setPdfLinks(JSON.parse(res)); // จัดเก็บลิงก์ที่ได้ลงใน State เพื่อนำไปแสดงผล
+            setPdfLinks(JSON.parse(res)); 
           })
           .withFailureHandler((err) => {
             setIsExportingPDF(false);
@@ -416,11 +560,11 @@
 
       const handleExportDefectReport = (taskId, e) => {
         e.stopPropagation();
-        setIsExportingPDF(true); // ใช้ State Loading ตัวเดิมได้เลย
+        setIsExportingPDF(true); 
         google.script.run
           .withSuccessHandler((res) => {
             setIsExportingPDF(false);
-            setPdfLinks([JSON.parse(res)]); // ใช้ Modal ตัวเดิมแสดงลิงก์
+            setPdfLinks([JSON.parse(res)]); 
           })
           .withFailureHandler((err) => {
             setIsExportingPDF(false);
