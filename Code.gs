@@ -33,7 +33,7 @@ function initSheets() {
 // 2. ฟังก์ชันดึงข้อมูลทั้งหมด
 function getAllData() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  
+
   // ฟังก์ชันย่อยสำหรับแปลงข้อมูลจาก Sheet เป็น Object
   const getSheetData = (sheetName) => {
     const sheet = ss.getSheetByName(sheetName);
@@ -45,6 +45,8 @@ function getAllData() {
       headers.forEach((header, index) => {
         obj[header] = row[index];
       });
+      // เพิ่มตัวแปร _raw ไว้เก็บข้อมูลแถวดิบๆ สำหรับอ้างอิงด้วย Column (0=A, 1=B, ..., 6=G)
+      obj['_raw'] = row; 
       return obj;
     });
   };
@@ -76,7 +78,8 @@ function getAllData() {
         building: task.Building,
         unit: task.Unit,
         status: task.Status || task['TaskStatus'] || task['สถานะ'] || task['สถานะใบงาน'] || 'รอดำเนินการ',
-        customerName: task.CustomerName,
+        // บังคับดึงข้อมูลจาก Column G (Index ที่ 6) โดยตรง
+        customerName: task._raw[6] || task.CustomerName || task['ชื่อลูกค้า'] || '', 
         targetFixDate: task.TargetFixDate,
         actualStartDate: task.ActualStartDate,
         actualEndDate: task.ActualEndDate,
