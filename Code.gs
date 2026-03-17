@@ -475,3 +475,129 @@ function updateDefectStatus(defectId, status) {
   }
   throw new Error("ไม่พบข้อมูล DefectID ที่ต้องการเปลี่ยนสถานะ");
 }
+
+// --- ฟังก์ชัน Export PDF แผนเข้าแก้ไข ---
+function exportTaskPlansToPDF(jobId) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  
+  // ใช้ฟังก์ชันดึงข้อมูลที่มีอยู่แล้วเพื่อความสะดวก
+  const allDataStr = getAllData();
+  const allJobs = JSON.parse(allDataStr);
+  const job = allJobs.find(j => j.id === jobId);
+  
+  if (!job) throw new Error("ไม่พบข้อมูลใบงานหลัก (Job)");
+  if (!job.tasks || job.tasks.length === 0) throw new Error("ไม่มีใบงานย่อยให้ Export");
+
+  const folder = DriveApp.getFolderById(IMAGE_FOLDER_ID);
+  let exportedFiles = [];
+
+  // Helper สำหรับแปลง URL ภาพใน Drive ให้ออกมาแสดงบน PDF ได้
+  const getPrintableImgUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('data:image')) return url;
+    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w500`;
+    return url;
+  };
+
+  job.tasks.forEach(task => {
+    let html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: sans-serif; color: #333; line-height: 1.5; font-size: 14px; }
+          h1 { text-align: center; color: #1e3a8a; margin-bottom: 20px; font-size: 22px; }
+          table.header { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+          table.header th, table.header td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+          table.header th { background-color: #f3f4f6; width: 15%; font-weight: bold; }
+          
+          .defect-card { border: 1px solid #999; margin-bottom: 20px; padding: 15px; page-break-inside: avoid; border-radius: 4px; }
+          .defect-layout { display: table; width: 100%; }
+          .img-col { display: table-cell; width: 180px; vertical-align: top; text-align: center; padding-right: 15px; border-right: 1px solid #eee; }
+          .info-col { display: table-cell; vertical-align: top; padding-left: 15px; }
+          
+          .img-col img { max-width: 100%; max-height: 180px; border: 1px solid #ddd; padding: 2px; }
+          .no-img { width: 100%; height: 100px; background: #f9f9f9; border: 1px dashed #ccc; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 12px; margin-top: 10px; }
+          
+          .meta { margin-bottom: 8px; color: #555; }
+          .meta strong { color: #111; }
+          .major { color: #dc2626; font-weight: bold; }
+          
+          /* ทำให้ส่วนรายละเอียดเด่นที่สุดเรียงเป็นบรรทัด */
+          .desc-box { background-color: #f8fafc; border-left: 5px solid #ef4444; padding: 12px 15px; margin: 12px 0; font-size: 18px; font-weight: bold; color: #000; display: block; }
+          .date-badge { display: inline-block; background-color: #fffbeb; border: 1px solid #fcd34d; color: #b45309; padding: 6px 12px; font-weight: bold; font-size: 14px; border-radius: 4px; margin-top: 5px; }
+        </style>
+      </head>
+      <body>
+        <h1>แผนเข้าแก้ไข (Repair Plan)</h1>
+        <table class="header">
+          <tr>
+            <th>Job ID</th><td>${job.id}</td>
+            <th>Task ID</th><td>${task.id}</td>
+          </tr>
+          <tr>
+            <th>Site</th><td>${job.site}</td>
+            <th>Scope</th><td>${task.scope}</td>
+          </tr>
+          <tr>
+            <th>Owner</th><td>${job.owner}</td>
+            <th>Building/Unit</th><td>${task.building} - ${task.unit}</td>
+          </tr>
+          <tr>
+            <th>Company</th><td>${job.ownerCompany}</td>
+            <th>ชื่อลูกค้า</th><td>${task.customerName}</td>
+          </tr>
+          <tr>
+            <th>Staff</th><td colspan="3">${job.staff}</td>
+          </tr>
+        </table>
+
+        <h3 style="margin-bottom:10px; border-bottom: 2px solid #ccc; padding-bottom:5px;">รายการ Defect ที่ต้องดำเนินการ</h3>
+    `;
+
+    if (task.defects && task.defects.length > 0) {
+      task.defects.forEach((def) => {
+        let printImg = getPrintableImgUrl(def.imgBefore);
+        let imgTag = printImg ? `<img src="${printImg}" />` : `<div class="no-img">ไม่มีรูปภาพก่อนแก้ไข</div>`;
+        
+        html += `
+        <div class="defect-card">
+          <div class="defect-layout">
+            <div class="img-col">
+              ${imgTag}
+            </div>
+            <div class="info-col">
+              <div class="meta"><strong>ลักษณะงานหลัก:</strong> ${def.mainCategory} &nbsp;|&nbsp; <strong>ลักษณะงานรอง:</strong> ${def.subCategory}</div>
+              <div class="meta"><strong>ทีมเข้าแก้ไข:</strong> ${def.team} &nbsp;|&nbsp; <strong>Major:</strong> <span class="${def.major === 'ใช่' ? 'major' : ''}">${def.major || 'ไม่ใช่'}</span></div>
+              
+              <div class="desc-box">
+                รายละเอียด:<br/>
+                <span style="font-weight:normal; font-size:16px;">${def.description}</span>
+              </div>
+              
+              <div class="date-badge">
+                📅 กำหนดวันเข้าแก้ไข: ${task.targetFixDate || 'ยังไม่ได้ระบุวันที่'}
+              </div>
+            </div>
+          </div>
+        </div>
+        `;
+      });
+    } else {
+      html += `<p style="text-align:center; color:#666; padding: 20px;">- ไม่มีรายการ Defect ในใบงานย่อยนี้ -</p>`;
+    }
+
+    html += `</body></html>`;
+
+    // แปลงเนื้อหาเป็น PDF
+    const blob = Utilities.newBlob(html, MimeType.HTML).getAs(MimeType.PDF).setName(`RepairPlan_${task.id}.pdf`);
+    const file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    exportedFiles.push({ taskId: task.id, url: file.getUrl() });
+  });
+
+  return JSON.stringify(exportedFiles);
+}
