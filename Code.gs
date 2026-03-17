@@ -769,3 +769,179 @@ function exportTaskPlansToPDF(jobId) {
 
   return JSON.stringify(exportedFiles);
 }
+
+// --- ฟังก์ชัน Export PDF เอกสารแก้ไข Defect (NEW) ---
+function exportDefectReportToPDF(taskId) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const allDataStr = getAllData();
+  const allJobs = JSON.parse(allDataStr);
+  
+  let targetTask = null;
+  let targetJob = null;
+  
+  // ค้นหา Job และ Task ที่ตรงกับ taskId
+  for (const job of allJobs) {
+    const foundTask = job.tasks.find(t => t.id === taskId);
+    if (foundTask) {
+      targetTask = foundTask;
+      targetJob = job;
+      break;
+    }
+  }
+
+  if (!targetTask) throw new Error("ไม่พบข้อมูลใบงานย่อย (Task)");
+
+  const folder = DriveApp.getFolderById(IMAGE_FOLDER_ID);
+  
+  // ฟังก์ชันย่อยสำหรับแปลงรูปเป็น Base64 ฝัง PDF
+  const getPrintableImgUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('data:image')) return url;
+    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      try {
+        const file = DriveApp.getFileById(match[1]);
+        const blob = file.getBlob();
+        const base64 = Utilities.base64Encode(blob.getBytes());
+        const mimeType = blob.getContentType();
+        return `data:${mimeType};base64,${base64}`;
+      } catch (e) {
+        return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w500`;
+      }
+    }
+    return url;
+  };
+
+  let html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+        <style>
+          body { font-family: 'Sarabun', sans-serif; color: #1e293b; line-height: 1.6; font-size: 14px; margin: 0; padding: 10px; }
+          .header-title { text-align: center; color: #0f172a; margin-bottom: 25px; font-size: 24px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+          table.header-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+          table.header-table th, table.header-table td { border: 1px solid #cbd5e1; padding: 10px 12px; text-align: left; vertical-align: top; }
+          table.header-table th { background-color: #f1f5f9; width: 18%; font-weight: 600; color: #334155; }
+          table.header-table td { width: 32%; color: #0f172a; }
+          .section-title { font-size: 18px; font-weight: 600; color: #1e40af; border-bottom: 2px solid #93c5fd; padding-bottom: 8px; margin-bottom: 15px; }
+          
+          .defect-card { border: 1px solid #e2e8f0; margin-bottom: 25px; padding: 15px; page-break-inside: avoid; border-radius: 8px; background-color: #ffffff; }
+          .defect-info { margin-bottom: 15px; padding: 12px; background-color: #f8fafc; border-radius: 6px; border-left: 4px solid #3b82f6; }
+          .defect-info strong { color: #0f172a; }
+          
+          .img-grid { display: table; width: 100%; table-layout: fixed; margin-top: 15px; }
+          .img-cell { display: table-cell; width: 25%; padding: 0 5px; text-align: center; vertical-align: top; }
+          .img-cell img { width: 100%; max-height: 180px; object-fit: contain; border: 1px solid #cbd5e1; border-radius: 6px; padding: 2px; }
+          .img-label { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: #1e40af; background-color: #eff6ff; padding: 4px 0; border-radius: 4px; }
+          .no-img { height: 120px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 12px; margin-top: 5px; }
+
+          .signature-container { width: 100%; margin-top: 50px; page-break-inside: avoid; }
+          .signature-table { width: 100%; border-collapse: collapse; text-align: center; }
+          .signature-table td { width: 50%; padding: 10px 20px; vertical-align: bottom; }
+          .sign-line { border-bottom: 1px dashed #94a3b8; width: 70%; margin: 40px auto 10px auto; }
+          .sign-text { color: #334155; font-size: 14px; line-height: 1.5; }
+          .sign-name { font-weight: 600; color: #0f172a; }
+        </style>
+      </head>
+      <body>
+        <div class="header-title">เอกสารแก้ไข Defect</div>
+        <table class="header-table">
+          <tr>
+            <th>Job ID</th><td>${targetJob.id}</td>
+            <th>Task ID</th><td>${targetTask.id}</td>
+          </tr>
+          <tr>
+            <th>Site</th><td>${targetJob.site}</td>
+            <th>Scope</th><td>${targetTask.scope}</td>
+          </tr>
+          <tr>
+            <th>Owner / ผู้ดูแล</th><td>${targetJob.owner}</td>
+            <th>Building / Unit</th><td>${targetTask.building} - ${targetTask.unit}</td>
+          </tr>
+          <tr>
+            <th>Company</th><td>${targetJob.ownerCompany || '-'}</td>
+            <th>ชื่อลูกค้า</th><td>${targetTask.customerName || '-'}</td>
+          </tr>
+          <tr>
+            <th>Staff / ผู้จัดทำ</th><td colspan="3">${targetJob.staff || '-'}</td>
+          </tr>
+        </table>
+
+        <div class="section-title">รายละเอียดผลการแก้ไข Defect</div>
+  `;
+
+  if (targetTask.defects && targetTask.defects.length > 0) {
+    targetTask.defects.forEach((def) => {
+      let imgUnit = getPrintableImgUrl(def.imgUnit);
+      let imgBefore = getPrintableImgUrl(def.imgBefore);
+      let imgDuring = getPrintableImgUrl(def.imgDuring);
+      let imgAfter = getPrintableImgUrl(def.imgAfter);
+
+      const renderImg = (src, label) => `
+        <div class="img-cell">
+          <div class="img-label">${label}</div>
+          ${src ? `<img src="${src}" />` : `<div class="no-img">ไม่มีรูปภาพ</div>`}
+        </div>
+      `;
+
+      html += `
+      <div class="defect-card">
+        <div class="defect-info">
+          <div style="margin-bottom: 6px;">
+            <strong>สถานะ:</strong> <span style="color: #047857; font-weight: 600;">${def.status}</span> &nbsp;|&nbsp; 
+            <strong>ลักษณะงานหลัก:</strong> ${def.mainCategory} &nbsp;|&nbsp; 
+            <strong>ลักษณะงานรอง:</strong> ${def.subCategory}
+          </div>
+          <div style="margin-bottom: 6px;">
+            <strong>ทีมเข้าแก้ไข:</strong> ${def.team}
+          </div>
+          <div>
+            <strong>รายละเอียด:</strong> ${def.description}
+          </div>
+        </div>
+        
+        <div class="img-grid">
+          ${renderImg(imgUnit, '1. รูปภาพเลขยูนิต')}
+          ${renderImg(imgBefore, '2. รูปภาพก่อนแก้ไข')}
+          ${renderImg(imgDuring, '3. รูปภาพระหว่างแก้ไข')}
+          ${renderImg(imgAfter, '4. รูปภาพหลังแก้ไข')}
+        </div>
+      </div>
+      `;
+    });
+  } else {
+    html += `<p style="text-align:center; color:#94a3b8; padding: 30px 0; font-style: italic;">- ไม่มีรายการ Defect ในใบงานย่อยนี้ -</p>`;
+  }
+
+  // ลายเซ็นต์ Owner (จาก Job) และ ลูกค้า (จาก Task)
+  html += `
+        <div class="signature-container">
+            <table class="signature-table">
+                <tr>
+                    <td>
+                        <div class="sign-line"></div>
+                        <div class="sign-text sign-name">( ${targetJob.owner || '.........................................................'} )</div>
+                        <div class="sign-text">ผู้อนุมัติ (Owner)</div>
+                        <div class="sign-text" style="margin-top: 5px;">วันที่: ......../......../..............</div>
+                    </td>
+                    <td>
+                        <div class="sign-line"></div>
+                        <div class="sign-text sign-name">( ${targetTask.customerName || '.........................................................'} )</div>
+                        <div class="sign-text">ลูกค้า (Customer)</div>
+                        <div class="sign-text" style="margin-top: 5px;">วันที่: ......../......../..............</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+      </body>
+    </html>
+  `;
+
+  const blob = Utilities.newBlob(html, MimeType.HTML).getAs(MimeType.PDF).setName(`DefectReport_${targetTask.id}.pdf`);
+  const file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  
+  return JSON.stringify({ taskId: targetTask.id, url: file.getUrl() });
+}
