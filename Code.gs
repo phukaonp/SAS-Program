@@ -482,24 +482,34 @@ function updateDefectStatus(defectId, status) {
 // --- ฟังก์ชัน Export PDF แผนเข้าแก้ไข ---
 function exportTaskPlansToPDF(jobId) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  
-  // ใช้ฟังก์ชันดึงข้อมูลที่มีอยู่แล้วเพื่อความสะดวก
   const allDataStr = getAllData();
   const allJobs = JSON.parse(allDataStr);
   const job = allJobs.find(j => j.id === jobId);
-  
+
   if (!job) throw new Error("ไม่พบข้อมูลใบงานหลัก (Job)");
   if (!job.tasks || job.tasks.length === 0) throw new Error("ไม่มีใบงานย่อยให้ Export");
 
   const folder = DriveApp.getFolderById(IMAGE_FOLDER_ID);
   let exportedFiles = [];
 
-  // Helper สำหรับแปลง URL ภาพใน Drive ให้ออกมาแสดงบน PDF ได้
+  // แก้ปัญหาภาพไม่ขึ้น: ดึงไฟล์จาก Drive แปลงเป็น Base64 เพื่อฝังลงใน PDF โดยตรง
   const getPrintableImgUrl = (url) => {
     if (!url) return '';
     if (url.startsWith('data:image')) return url;
     const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w500`;
+    if (match && match[1]) {
+      try {
+        const fileId = match[1];
+        const file = DriveApp.getFileById(fileId);
+        const blob = file.getBlob();
+        const base64 = Utilities.base64Encode(blob.getBytes());
+        const mimeType = blob.getContentType();
+        return `data:${mimeType};base64,${base64}`;
+      } catch (e) {
+        // Fallback กรณีดึงไฟล์ไม่ได้
+        return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w500`;
+      }
+    }
     return url;
   };
 
@@ -509,33 +519,166 @@ function exportTaskPlansToPDF(jobId) {
     <html>
       <head>
         <meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
         <style>
-          body { font-family: sans-serif; color: #333; line-height: 1.5; font-size: 14px; }
-          h1 { text-align: center; color: #1e3a8a; margin-bottom: 20px; font-size: 22px; }
-          table.header { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
-          table.header th, table.header td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-          table.header th { background-color: #f3f4f6; width: 15%; font-weight: bold; }
+          body { 
+            font-family: 'Sarabun', sans-serif; 
+            color: #1e293b; 
+            line-height: 1.6; 
+            font-size: 14px; 
+            margin: 0; 
+            padding: 10px;
+          }
+          .header-title { 
+            text-align: center; 
+            color: #0f172a; 
+            margin-bottom: 25px; 
+            font-size: 24px; 
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          table.header-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-bottom: 30px; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+          }
+          table.header-table th, table.header-table td { 
+            border: 1px solid #cbd5e1; 
+            padding: 10px 12px; 
+            text-align: left; 
+            vertical-align: top;
+          }
+          table.header-table th { 
+            background-color: #f1f5f9; 
+            width: 18%; 
+            font-weight: 600; 
+            color: #334155;
+          }
+          table.header-table td {
+            width: 32%;
+            color: #0f172a;
+          }
           
-          .defect-card { border: 1px solid #999; margin-bottom: 20px; padding: 15px; page-break-inside: avoid; border-radius: 4px; }
-          .defect-layout { display: table; width: 100%; }
-          .img-col { display: table-cell; width: 180px; vertical-align: top; text-align: center; padding-right: 15px; border-right: 1px solid #eee; }
-          .info-col { display: table-cell; vertical-align: top; padding-left: 15px; }
+          .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1e40af;
+            border-bottom: 2px solid #93c5fd;
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+          }
+
+          .defect-card { 
+            border: 1px solid #e2e8f0; 
+            margin-bottom: 20px; 
+            padding: 15px; 
+            page-break-inside: avoid; 
+            border-radius: 8px; 
+            background-color: #ffffff;
+          }
+          .defect-layout { 
+            display: table; 
+            width: 100%; 
+          }
+          .img-col { 
+            display: table-cell; 
+            width: 200px; 
+            vertical-align: top; 
+            text-align: center; 
+            padding-right: 20px; 
+            border-right: 1px dashed #cbd5e1; 
+          }
+          .info-col { 
+            display: table-cell; 
+            vertical-align: top; 
+            padding-left: 20px; 
+          }
           
-          .img-col img { max-width: 100%; max-height: 180px; border: 1px solid #ddd; padding: 2px; }
-          .no-img { width: 100%; height: 100px; background: #f9f9f9; border: 1px dashed #ccc; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 12px; margin-top: 10px; }
+          .img-col img { 
+            max-width: 100%; 
+            max-height: 200px; 
+            border-radius: 6px; 
+            border: 1px solid #e2e8f0; 
+            padding: 3px;
+          }
+          .no-img { 
+            width: 100%; 
+            height: 120px; 
+            background: #f8fafc; 
+            border: 2px dashed #cbd5e1; 
+            border-radius: 6px;
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            color: #94a3b8; 
+            font-size: 13px; 
+            margin-top: 10px;
+          }
           
-          .meta { margin-bottom: 8px; color: #555; }
-          .meta strong { color: #111; }
-          .major { color: #dc2626; font-weight: bold; }
+          .meta { margin-bottom: 6px; color: #475569; }
+          .meta strong { color: #1e293b; font-weight: 600;}
+          .major { color: #dc2626; font-weight: 700; background-color: #fef2f2; padding: 2px 6px; border-radius: 4px; font-size: 12px;}
           
-          /* ทำให้ส่วนรายละเอียดเด่นที่สุดเรียงเป็นบรรทัด */
-          .desc-box { background-color: #f8fafc; border-left: 5px solid #ef4444; padding: 12px 15px; margin: 12px 0; font-size: 18px; font-weight: bold; color: #000; display: block; }
-          .date-badge { display: inline-block; background-color: #fffbeb; border: 1px solid #fcd34d; color: #b45309; padding: 6px 12px; font-weight: bold; font-size: 14px; border-radius: 4px; margin-top: 5px; }
+          .desc-box { 
+            background-color: #f8fafc; 
+            border-left: 4px solid #3b82f6; 
+            padding: 12px 15px; 
+            margin: 15px 0; 
+            font-size: 15px; 
+            color: #334155; 
+            display: block;
+            border-radius: 0 6px 6px 0;
+          }
+          .desc-box strong { color: #0f172a; display: block; margin-bottom: 4px; font-size: 14px;}
+
+          .date-badge { 
+            display: inline-block; 
+            background-color: #fffbeb; 
+            border: 1px solid #fde68a; 
+            color: #b45309; 
+            padding: 6px 12px; 
+            font-weight: 600; 
+            font-size: 13px; 
+            border-radius: 6px; 
+          }
+
+          /* --- ส่วนลายเซ็น (Signature Section) --- */
+          .signature-container {
+              width: 100%;
+              margin-top: 50px;
+              page-break-inside: avoid;
+          }
+          .signature-table {
+              width: 100%;
+              border-collapse: collapse;
+              text-align: center;
+          }
+          .signature-table td {
+              width: 50%;
+              padding: 10px 20px;
+              vertical-align: bottom;
+          }
+          .sign-line {
+              border-bottom: 1px dashed #94a3b8;
+              width: 70%;
+              margin: 40px auto 10px auto;
+          }
+          .sign-text {
+              color: #334155;
+              font-size: 14px;
+              line-height: 1.5;
+          }
+          .sign-name {
+              font-weight: 600;
+              color: #0f172a;
+          }
         </style>
       </head>
       <body>
-        <h1>แผนเข้าแก้ไข (Repair Plan)</h1>
-        <table class="header">
+        <div class="header-title">แผนเข้าแก้ไข (Repair Plan)</div>
+        <table class="header-table">
           <tr>
             <th>Job ID</th><td>${job.id}</td>
             <th>Task ID</th><td>${task.id}</td>
@@ -545,19 +688,19 @@ function exportTaskPlansToPDF(jobId) {
             <th>Scope</th><td>${task.scope}</td>
           </tr>
           <tr>
-            <th>Owner</th><td>${job.owner}</td>
-            <th>Building/Unit</th><td>${task.building} - ${task.unit}</td>
+            <th>Owner / ผู้ดูแล</th><td>${job.owner}</td>
+            <th>Building / Unit</th><td>${task.building} - ${task.unit}</td>
           </tr>
           <tr>
-            <th>Company</th><td>${job.ownerCompany}</td>
-            <th>ชื่อลูกค้า</th><td>${task.customerName}</td>
+            <th>Company</th><td>${job.ownerCompany || '-'}</td>
+            <th>ชื่อลูกค้า</th><td>${task.customerName || '-'}</td>
           </tr>
           <tr>
-            <th>Staff</th><td colspan="3">${job.staff}</td>
+            <th>Staff / ผู้จัดทำ</th><td colspan="3">${job.staff || '-'}</td>
           </tr>
         </table>
 
-        <h3 style="margin-bottom:10px; border-bottom: 2px solid #ccc; padding-bottom:5px;">รายการ Defect ที่ต้องดำเนินการ</h3>
+        <div class="section-title">รายการ Defect ที่ต้องดำเนินการ</div>
     `;
 
     if (task.defects && task.defects.length > 0) {
@@ -576,8 +719,8 @@ function exportTaskPlansToPDF(jobId) {
               <div class="meta"><strong>ทีมเข้าแก้ไข:</strong> ${def.team} &nbsp;|&nbsp; <strong>Major:</strong> <span class="${def.major === 'ใช่' ? 'major' : ''}">${def.major || 'ไม่ใช่'}</span></div>
               
               <div class="desc-box">
-                รายละเอียด:<br/>
-                <span style="font-weight:normal; font-size:16px;">${def.description}</span>
+                <strong>รายละเอียดปัญหา:</strong>
+                ${def.description}
               </div>
               
               <div class="date-badge">
@@ -589,8 +732,30 @@ function exportTaskPlansToPDF(jobId) {
         `;
       });
     } else {
-      html += `<p style="text-align:center; color:#666; padding: 20px;">- ไม่มีรายการ Defect ในใบงานย่อยนี้ -</p>`;
+      html += `<p style="text-align:center; color:#94a3b8; padding: 30px 0; font-style: italic;">- ไม่มีรายการ Defect ในใบงานย่อยนี้ -</p>`;
     }
+
+    // --- ส่วน HTML ลายเซ็นต์ท้ายเอกสาร ---
+    html += `
+        <div class="signature-container">
+            <table class="signature-table">
+                <tr>
+                    <td>
+                        <div class="sign-line"></div>
+                        <div class="sign-text sign-name">( ${job.staff || '.........................................................'} )</div>
+                        <div class="sign-text">ผู้จัดทำแผน (Staff)</div>
+                        <div class="sign-text" style="margin-top: 5px;">วันที่: ......../......../..............</div>
+                    </td>
+                    <td>
+                        <div class="sign-line"></div>
+                        <div class="sign-text sign-name">( ${job.owner || '.........................................................'} )</div>
+                        <div class="sign-text">ผู้อนุมัติ (Owner)</div>
+                        <div class="sign-text" style="margin-top: 5px;">วันที่: ......../......../..............</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    `;
 
     html += `</body></html>`;
 
