@@ -15,7 +15,7 @@
     const { useState, useEffect } = React;
 
     // --- Mock Data Options ---
-    const STAFFS = ['สมชาย ช่างซ่อม', 'สมหญิง แอดมิน', 'USER_CURRENT'];
+    const STAFFS = ['ณภัทร ปรีชาวุฒิวงศ์', 'ณเดช คูกิมิยะ', 'USER_CURRENT'];
     const MAIN_CATEGORIES = ['งานโครงสร้าง', 'งานสถาปัตย์', 'งานระบบไฟฟ้า', 'งานระบบประปา'];
     const SUB_CATEGORIES = {
       'งานโครงสร้าง': ['ผนังร้าว', 'พื้นทรุด'],
@@ -226,6 +226,8 @@
       const [isLoading, setIsLoading] = useState(true);
       const [isSaving, setIsSaving] = useState(false);
       const [isDeleting, setIsDeleting] = useState(false);
+      const [isExportingPDF, setIsExportingPDF] = useState(false);
+      const [pdfLinks, setPdfLinks] = useState([]);
       
       const [activeJobId, setActiveJobId] = useState(null);
       const [activeTaskId, setActiveTaskId] = useState(null);
@@ -377,6 +379,24 @@
         }
       };
 
+      const handleExportTaskPlans = () => {
+        if (!activeJob?.tasks || activeJob.tasks.length === 0) {
+          alert('ไม่มีใบงานย่อยให้ Export ใน Job นี้');
+          return;
+        }
+        setIsExportingPDF(true);
+        google.script.run
+          .withSuccessHandler((res) => {
+            setIsExportingPDF(false);
+            setPdfLinks(JSON.parse(res)); // จัดเก็บลิงก์ที่ได้ลงใน State เพื่อนำไปแสดงผล
+          })
+          .withFailureHandler((err) => {
+            setIsExportingPDF(false);
+            alert('เกิดข้อผิดพลาดในการ Export PDF: ' + err.message);
+          })
+          .exportTaskPlansToPDF(activeJobId);
+      };
+      
       const handleUpdateTaskStatus = (id, status) => {
         if (window.confirm(`⚠️ คุณต้องการเปลี่ยนสถานะใบงานย่อยเป็น "${status}" ใช่หรือไม่?`)) {
           setIsSaving(true);
@@ -413,7 +433,7 @@
         const [formData, setFormData] = useState({ 
           id: editingJob ? editingJob.id : '',
           site: editingJob ? editingJob.site : (uniqueSites[0] || ''), 
-          owner: editingJob ? editingJob.owner : '', 
+          owner: editingJob ? editingJob.owner : '', map
           ownerCompany: editingJob ? editingJob.ownerCompany : '', 
           staff: editingJob ? editingJob.staff : STAFFS[2], 
           replyDueDate: editingJob ? formatDateForInput(editingJob.replyDueDate) : '', 
@@ -816,9 +836,19 @@
                       <span>Owner: <span className="font-medium text-gray-700">{activeJob?.ownerCompany}</span></span>
                     </div>
                   </div>
-                  <button onClick={() => setShowTaskForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center font-medium shadow-md shadow-blue-200 transition-all hover:-translate-y-0.5">
-                    <span className="mr-2"><IconPlus /></span> สร้างใบงานย่อย (Task)
-                  </button>
+                  <div className="flex flex-wrap gap-3 mt-3 md:mt-0">
+                    <button 
+                      onClick={handleExportTaskPlans} 
+                      disabled={isExportingPDF} 
+                      className="bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 px-5 py-2.5 rounded-lg flex items-center font-medium shadow-sm transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                      {isExportingPDF ? 'กำลังสร้างเอกสาร...' : <><span className="mr-2">📄</span> Export แผนเข้าแก้ไข</>}
+                    </button>
+                    <button 
+                      onClick={() => setShowTaskForm(true)} 
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center font-medium shadow-md shadow-blue-200 transition-all hover:-translate-y-0.5">
+                      <span className="mr-2"><IconPlus /></span> สร้างใบงานย่อย (Task)
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-6">
@@ -1022,6 +1052,33 @@
                 <DefectImagesUploader defect={activeDefect} taskStatus={activeTask?.status} onSuccess={fetchData} />
               </div>
             )}
+              {/* --- ส่วน Modal แสดงผลลัพธ์ Export PDF --- */}
+              {pdfLinks.length > 0 && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+                    <div className="flex justify-between items-center mb-4 border-b pb-3">
+                      <h2 className="text-xl font-bold text-emerald-600 flex items-center gap-2">
+                        <IconCheckCircle /> สร้างไฟล์ PDF สำเร็จ
+                      </h2>
+                      <button onClick={() => setPdfLinks([])} className="text-gray-400 hover:text-red-500"><IconX /></button>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">ระบบได้แยกไฟล์ตามรายการใบงานย่อยไว้เรียบร้อยแล้ว กดปุ่มด้านล่างเพื่อเปิดหรือดาวน์โหลดเอกสาร</p>
+                    
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                      {pdfLinks.map(link => (
+                        <a key={link.taskId} href={link.url} target="_blank" rel="noreferrer" className="flex justify-between items-center p-3 border border-gray-200 rounded-lg hover:bg-blue-50 text-blue-600 hover:text-blue-700 hover:border-blue-200 transition-colors font-bold group">
+                          <span className="flex items-center"><span className="mr-2 text-xl">📄</span> {link.taskId}</span>
+                          <span className="text-gray-400 group-hover:text-blue-600"><IconChevronRight /></span>
+                        </a>
+                      ))}
+                    </div>
+                    
+                    <div className="mt-6 flex justify-end">
+                      <button onClick={() => setPdfLinks([])} className="px-6 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg font-bold transition-colors shadow-sm">ปิดหน้าต่าง</button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
           </main>
 
