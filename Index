@@ -363,6 +363,13 @@
     };
 
     function App() {
+      // --- เพิ่ม State สำหรับ Auth ---
+      const [currentUser, setCurrentUser] = useState(null);
+      const [authMode, setAuthMode] = useState('LOGIN'); // 'LOGIN' หรือ 'REGISTER'
+      const [authForm, setAuthForm] = useState({ userId: '', password: '', confirmPassword: '', fullName: '' });
+      const [authLoading, setAuthLoading] = useState(false);
+      const [authError, setAuthError] = useState('');
+
       const [view, setView] = useState('JOB_LIST');
       const [jobs, setJobs] = useState([]);
       const [ownerMaster, setOwnerMaster] = useState([]);
@@ -385,6 +392,58 @@
       const activeJob = jobs.find(j => j.id === activeJobId);
       const activeTask = activeJob?.tasks?.find(t => t.id === activeTaskId);
       const activeDefect = activeTask?.defects?.find(d => d.id === activeDefectId);
+
+      // --- ฟังก์ชันจัดการ Auth ---
+      const handleAuthSubmit = (e) => {
+        e.preventDefault();
+        setAuthError('');
+        setAuthLoading(true);
+
+        if (authMode === 'REGISTER') {
+          if (!authForm.userId || !authForm.password || !authForm.fullName) {
+            setAuthError('กรุณากรอกข้อมูลที่มีเครื่องหมาย * ให้ครบถ้วน');
+            setAuthLoading(false);
+            return;
+          }
+          if (authForm.password !== authForm.confirmPassword) {
+            setAuthError('รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน');
+            setAuthLoading(false);
+            return;
+          }
+          
+          google.script.run
+            .withSuccessHandler(() => {
+              alert('สมัครสมาชิกสำเร็จ กรุณาเข้าสู่ระบบ');
+              setAuthMode('LOGIN');
+              setAuthForm({ userId: '', password: '', confirmPassword: '', fullName: '' });
+              setAuthLoading(false);
+            })
+            .withFailureHandler(err => {
+              setAuthError(err.message);
+              setAuthLoading(false);
+            })
+            .registerUser(authForm);
+            
+        } else {
+          // LOGIN
+          if (!authForm.userId || !authForm.password) {
+            setAuthError('กรุณากรอก User ID และ รหัสผ่าน');
+            setAuthLoading(false);
+            return;
+          }
+          
+          google.script.run
+            .withSuccessHandler((user) => {
+              setCurrentUser(user);
+              setAuthLoading(false);
+            })
+            .withFailureHandler(err => {
+              setAuthError(err.message);
+              setAuthLoading(false);
+            })
+            .loginUser(authForm.userId, authForm.password);
+        }
+      };
       
       const fetchData = () => {
         setIsLoading(true);
@@ -888,6 +947,94 @@
         );
       }
 
+      // --- เช็คว่ามีการ Login หรือไม่ ---
+      if (!currentUser) {
+        return (
+          <div className="min-h-screen bg-slate-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+            <div className="sm:mx-auto sm:w-full sm:max-w-md">
+              <div className="flex justify-center text-white mb-4"><IconClipboard /></div>
+              <h2 className="text-center text-3xl font-extrabold text-white">
+                {authMode === 'LOGIN' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิกใหม่'}
+              </h2>
+              <p className="mt-2 text-center text-sm text-gray-400">
+                SAS Defect Management
+              </p>
+            </div>
+
+            <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+              <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+                <form className="space-y-6" onSubmit={handleAuthSubmit}>
+                  {authError && (
+                    <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4 rounded-md">
+                      <p className="text-sm text-red-700 font-medium">{authError}</p>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">User ID <span className="text-red-500">*</span></label>
+                    <div className="mt-1">
+                      <input type="text" required value={authForm.userId} onChange={e => setAuthForm({...authForm, userId: e.target.value})} className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                    </div>
+                  </div>
+
+                  {authMode === 'REGISTER' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
+                      <div className="mt-1">
+                        <input type="text" required value={authForm.fullName} onChange={e => setAuthForm({...authForm, fullName: e.target.value})} className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">รหัสผ่าน <span className="text-red-500">*</span></label>
+                    <div className="mt-1">
+                      <input type="password" required value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                    </div>
+                  </div>
+
+                  {authMode === 'REGISTER' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">ยืนยันรหัสผ่าน <span className="text-red-500">*</span></label>
+                      <div className="mt-1">
+                        <input type="password" required value={authForm.confirmPassword} onChange={e => setAuthForm({...authForm, confirmPassword: e.target.value})} className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <button type="submit" disabled={authLoading} className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-colors">
+                      {authLoading ? 'กำลังดำเนินการ...' : (authMode === 'LOGIN' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก')}
+                    </button>
+                  </div>
+                </form>
+
+                <div className="mt-6">
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-300" /></div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="px-2 bg-white text-gray-500">
+                        {authMode === 'LOGIN' ? 'ยังไม่มีบัญชีผู้ใช้?' : 'มีบัญชีอยู่แล้ว?'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-6">
+                    <button onClick={() => {
+                        setAuthMode(authMode === 'LOGIN' ? 'REGISTER' : 'LOGIN');
+                        setAuthError('');
+                      }} 
+                      className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                      {authMode === 'LOGIN' ? 'ลงทะเบียนผู้ใช้ใหม่' : 'กลับไปหน้าเข้าสู่ระบบ'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // --- หน้าจอหลักหลังจาก Login ---
       return (
         <div className="min-h-screen pb-12">
           <nav className="bg-slate-900 text-white shadow-md sticky top-0 z-40">
@@ -895,6 +1042,17 @@
               <div className="flex items-center cursor-pointer hover:text-blue-200 transition-colors" onClick={() => setView('JOB_LIST')}>
                 <IconClipboard />
                  <span className="ml-3 font-bold text-xl tracking-wide">SAS Defect Management</span>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-medium text-gray-300 hidden sm:block">
+                  ผู้ใช้งาน: <span className="text-white">{currentUser.fullName}</span>
+                </span>
+                <button 
+                  onClick={() => setCurrentUser(null)} 
+                  className="bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded text-sm font-bold transition-colors border border-red-500/20 hover:border-red-500">
+                  ออกจากระบบ
+                </button>
               </div>
             </div>
           </nav>
