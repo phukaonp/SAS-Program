@@ -1,1018 +1,1561 @@
-const SPREADSHEET_ID = '1BkhC_02odW8OINve6c3Ec4QI4cr_DEQvFGCVWrgebfg';
-const IMAGE_FOLDER_ID = '1pD5dfsyjrtoy7k3IUGaCGPMo6-SiCJPO'; // <--- เพิ่มบรรทัดนี้
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>SAS Defect Management</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+  <div id="root"></div>
 
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('SAS Defect Management')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-}
-
-function initSheets() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheetsInfo = {
-    'JOB': ['JobID', 'Site', 'Owner', 'OwnerCompany', 'Staff', 'ReplyDueDate', 'Remark', 'Timestamp', 'Status'],
-    'TASK': ['TaskID', 'JobID', 'Scope', 'Building', 'Unit', 'Status', 'CustomerName', 'TargetFixDate', 'ActualStartDate', 'ActualEndDate', 'Duration', 'Remark', 'Timestamp'],
-    'DEFECT': [
-      'DefectID', 'TaskID', 'TargetStartDate', 'TargetEndDate', 'Status', 'MainCategory', 
-      'SubCategory', 'Description', 'Major', 'Team', 'ImgUnit', 'ImgBefore', 'ImgDuring', 'ImgAfter', 'Timestamp', 
-      'VOSteps', 'ActualStartDate', 'ActualEndDate', 'Remark' 
-    ],
-    // เพิ่ม Sheet User และตั้ง Timestamp ให้อยู่ที่ Col N (ตำแหน่งที่ 14)
-    'User': ['UserID', 'Password', '', '', 'Position', '', '', '', '', 'Email', 'Line', 'Phone', '','','Timestamp'] 
-  };
-
-  Object.keys(sheetsInfo).forEach(name => {
-    let sheet = ss.getSheetByName(name);
-    if (!sheet) {
-      sheet = ss.insertSheet(name);
-      sheet.appendRow(sheetsInfo[name]);
-      sheet.getRange(1, 1, 1, sheetsInfo[name].length).setFontWeight("bold").setBackground("#f3f4f6");
-    }
-  });
-}
-
-// 2. ฟังก์ชันดึงข้อมูลทั้งหมด
-function getAllData() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-
-  // ฟังก์ชันย่อยสำหรับแปลงข้อมูลจาก Sheet เป็น Object
-  const getSheetData = (sheetName) => {
-    const sheet = ss.getSheetByName(sheetName);
-    if (!sheet) return [];
-    const data = sheet.getDataRange().getDisplayValues();
-    const headers = data.shift();
-    return data.map(row => {
-      let obj = {};
-      headers.forEach((header, index) => {
-        if (header) { // กันกรณีหัวตารางว่าง
-          obj[header] = row[index];
+  <script type="text/babel">
+    // --- Mock Google Apps Script API สำหรับการทดสอบนอกระบบ (Local/Canvas) ---
+    // ช่วยป้องกัน Error: google is not defined เวลาเปิดทดสอบแบบ Local
+    if (typeof google === 'undefined') {
+      console.warn("Google Apps Script API not found. Running in Mock Mode for UI testing.");
+      window.google = {
+        script: {
+          run: new Proxy({}, {
+            get: function(_, prop) {
+              const handler = {
+                success: null,
+                failure: null,
+                withSuccessHandler: function(cb) { this.success = cb; return new Proxy(this, proxyHandler); },
+                withFailureHandler: function(cb) { this.failure = cb; return new Proxy(this, proxyHandler); }
+              };
+              const proxyHandler = {
+                get: function(t, p) {
+                  if (p in t) return typeof t[p] === 'function' ? t[p].bind(t) : t[p];
+                  return function(...args) {
+                    console.log(`[Mock API] Called: ${p}`, args);
+                    setTimeout(() => {
+                      if (t.success) {
+                        if (p === 'getAllData') t.success(JSON.stringify([
+                           { id: 'JOB-MOCK-001', site: 'Mock Site', owner: 'Mock Owner', ownerCompany: 'Mock Company', staff: 'Mock Staff', status: 'Active', remark: 'นี่คือข้อมูลจำลอง', tasks: [
+                             { id: 'TSK-MOCK-001', scope: 'SAS', building: 'Tower A', unit: 'A101', status: 'Active', customerName: 'Mock Customer', targetFixDate: '2025-12-31', defects: [
+                               { id: 'DEF-MOCK-001', mainCategory: 'งานสถาปัตย์', subCategory: 'สีลอกร่อน', description: 'นี่คือข้อมูลจำลองสำหรับทดสอบ UI', major: 'ไม่ใช่', team: 'ทีมช่างสี', status: 'ยังไม่แก้ไข' }
+                             ]}
+                           ]}
+                        ]));
+                        else if (p === 'getMasterData') t.success(JSON.stringify({sites: ['Mock Site'], owners: [{site: 'Mock Site', owner: 'Mock Owner', ownerCompany: 'Mock Company'}]}));
+                        else if (p === 'loginUser') t.success({userId: args[0], fullName: 'ผู้ใช้งานจำลอง (Mock)'});
+                        else if (p === 'exportTaskPlansToPDF' || p === 'exportDefectReportToPDF') t.success(JSON.stringify([{taskId: 'MOCK-DOC', url: '#'}]));
+                        else t.success("Mock-Success");
+                      }
+                    }, 400);
+                  };
+                }
+              };
+              if (prop === 'withSuccessHandler' || prop === 'withFailureHandler') return handler[prop].bind(handler);
+              return proxyHandler.get(handler, prop);
+            }
+          })
         }
-      });
-      // เพิ่มตัวแปร _raw ไว้เก็บข้อมูลแถวดิบๆ สำหรับอ้างอิงด้วย Column (0=A, 1=B, ..., 6=G)
-      obj['_raw'] = row; 
-      return obj;
-    });
-  };
-
-  const jobs = getSheetData('JOB');
-  const tasks = getSheetData('TASK');
-  const defects = getSheetData('DEFECT');
-
-  const structuredJobs = jobs.map(job => {
-    const jobTasks = tasks.filter(t => t.JobID === job.JobID).map(task => {
-      const taskDefects = defects.filter(d => d.TaskID === task.TaskID).map(def => ({
-          id: def.DefectID || def['DefectID'],
-          mainCategory: def.MainCategory || def['ลักษณะงานหลัก'],
-          subCategory: def.SubCategory || def['ลักษณะงานรอง'],
-          description: def.Description || def['รายละเอียด'],
-          major: def.Major || def['Major'], 
-          team: def.Team || def['ทีมเข้าแก้ไข'],
-          imgUnit: def.ImgUnit || def['รูปภาพเลขยูนิต'], 
-          imgBefore: def.ImgBefore || def['รูปภาพก่อนแก้ไข'],
-          imgDuring: def.ImgDuring || def['รูปภาพระหว่างแก้ไข'],
-          imgAfter: def.ImgAfter || def['รูปภาพหลังแก้ไข'],
-          status: def.Status || def['DefectStatus'] || def['สถานะ defect'],
-          remark: def.Remark || def['หมายเหตุ'] || ''
-      }));
-
-      return {
-        id: task.TaskID,
-        scope: task.Scope,
-        building: task.Building,
-        unit: task.Unit,
-        status: task.Status || task['TaskStatus'] || task['สถานะ'] || task['สถานะใบงาน'] || 'รอดำเนินการ',
-        // บังคับดึงข้อมูลจาก Column G (Index ที่ 6) โดยตรง
-        customerName: task._raw[6] || task.CustomerName || task['ชื่อลูกค้า'] || '', 
-        targetFixDate: task.TargetFixDate,
-        actualStartDate: task.ActualStartDate,
-        actualEndDate: task.ActualEndDate,
-        duration: task.Duration,
-        remark: task.Remark,
-        defects: taskDefects
       };
-    });
-      
-    return {
-      id: job.JobID,
-      site: job.Site,
-      owner: job.Owner,
-      ownerCompany: job.OwnerCompany,
-      staff: job.Staff,
-      replyDueDate: job.ReplyDueDate,
-      remark: job.Remark,
-      status: job.Status || job['JobStatus'] || job['สถานะ'] || job['สถานะใบงานหลัก'] || 'รอดำเนินการ',
-      tasks: jobTasks
+    }
+
+    const { useState, useEffect, useRef } = React;
+
+    // --- Mock Data Options ---
+    const STAFFS = ['ณภัทร ปรีชาวุฒิวงศ์', 'ณเดช คูกิมิยะ', 'USER_CURRENT'];
+    const MAIN_CATEGORIES = ['งานโครงสร้าง', 'งานสถาปัตย์', 'งานระบบไฟฟ้า', 'งานระบบประปา'];
+    const SUB_CATEGORIES = {
+      'งานโครงสร้าง': ['ผนังร้าว', 'พื้นทรุด'],
+      'งานสถาปัตย์': ['สีลอกร่อน', 'กระเบื้องแตก', 'บัวหลุด'],
+      'งานระบบไฟฟ้า': ['ปลั๊กเสีย', 'ไฟไม่ติด'],
+      'งานระบบประปา': ['ท่อรั่ว', 'ก๊อกน้ำซึม']
     };
-  });
+    const TEAMS = ['ทีมช่างสี (Internal)', 'ทีมช่างไฟ (Internal)', 'Supplier A (โครงสร้าง)', 'Supplier B (ประปา)'];
 
-  return JSON.stringify(structuredJobs);
-}
+    // --- SVG Icons Components ---
+    const IconPlus = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>;
+    const IconX = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>;
+    const IconHome = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
+    const IconChevronRight = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>;
+    const IconSave = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
+    const IconClipboard = () => <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 14h6"/><path d="M9 18h6"/><path d="M9 10h6"/></svg>;
+    const IconSettings = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>;
+    const IconTrash = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+    const IconCheckCircle = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>;
+    const IconDownload = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
 
-function addJob(formData) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('JOB');
-  const newId = 'JOB-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
-  
-  sheet.appendRow([
-    newId,                        // Col A
-    formData.site || '',          // Col B
-    formData.owner || '',         // Col C
-    formData.ownerCompany || '',  // Col D
-    formData.staff || '',         // Col E
-    formData.replyDueDate || '',  // Col F
-    formData.remark || '',        // Col G
-    new Date(),                   // Col H: Timestamp
-    'รอดำเนินการ'                   // Col I: Status
-  ]);
-  return newId;
-}
+    // --- Icons สำหรับ Form สมัครสมาชิก ---
+    const IconUser = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>;
+    const IconLock = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>;
+    const IconBriefcase = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>;
+    const IconMail = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>;
+    const IconMessage = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>;
+    const IconPhone = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>;
 
-function addTask(jobId, formData) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('TASK');
-  
-  const newId = 'TSK-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
-  const historyLog = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy, HH:mm:ss');
-  
-  let durationDate = '';
-  if (formData.targetFixDate) {
-    const parts = formData.targetFixDate.split('-'); 
-    if (parts.length === 3) {
-      const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
-      dateObj.setDate(dateObj.getDate() + 14);
-      durationDate = Utilities.formatDate(dateObj, Session.getScriptTimeZone(), 'yyyy-MM-dd'); 
-    }
-  }
+    // --- UI Components ---
+    const StatusBadge = ({ status }) => {
+      let colorClass = 'bg-gray-100 text-gray-700 border-gray-200'; // Default
+      if (status === 'Active') colorClass = 'bg-blue-50 text-blue-700 border-blue-200';
+      else if (status === 'Closed' || status === 'แก้ไขแล้ว' || status === 'เสร็จสิ้น') colorClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      else if (status === 'รอดำเนินการ' || status === 'ยังไม่แก้ไข') colorClass = 'bg-amber-50 text-amber-700 border-amber-200';
+      else if (status === 'Reject') colorClass = 'bg-red-50 text-red-700 border-red-200';
+      
+      return <span className={`px-2.5 py-1 text-[11px] font-bold rounded-md border ${colorClass}`}>{status || 'ไม่มีสถานะ'}</span>;
+    };
 
-  sheet.appendRow([
-    newId,                        // Col A: TaskID
-    jobId,                        // Col B: JobID
-    formData.scope || 'SAS',      // Col C: Scope
-    formData.building || '',      // Col D: Building
-    formData.unit || '',          // Col E: Unit
-    'รอดำเนินการ',                  // Col F: Status
-    formData.customerName || '',  // Col G: ชื่อลูกค้า
-    formData.targetFixDate || '', // Col H: กำหนดวันเข้าแก้ไข
-    durationDate,                 // Col I: Duration
-    formData.remark || '',        // Col J: รายละเอียด
-    historyLog                    // Col K: ประวัติ
-  ]);
-  
-  return newId;
-}
+    // --- Component จัดการรูปภาพ (วาด + ใส่ลายน้ำ พิกัด & เวลา) ---
+    const ImageAnnotator = ({ imageSrc, field, onSave, onClose }) => {
+      const canvasRef = useRef(null);
+      const [isDrawing, setIsDrawing] = useState(false);
+      const [location, setLocation] = useState('กำลังหาพิกัด...');
 
-function addDefect(taskId, defectData) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('DEFECT');
-  const newId = 'DEF-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
+      useEffect(() => {
+        // 1. ดึงพิกัด Location
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => setLocation(`Lat: ${pos.coords.latitude.toFixed(5)}, Lng: ${pos.coords.longitude.toFixed(5)}`),
+            (err) => setLocation('Location: ไม่สามารถดึงพิกัดได้')
+          );
+        } else {
+          setLocation('Location: ไม่รองรับการดึงพิกัด');
+        }
 
-  function uploadBase64(base64Str, filename) {
-    if (!base64Str) return '';
-    try {
-      const splitBase = base64Str.split(',');
-      const contentType = splitBase[0].split(';')[0].replace('data:', '');
-      const byteCharacters = Utilities.base64Decode(splitBase[1]);
-      const blob = Utilities.newBlob(byteCharacters, contentType, filename);
-      const folder = DriveApp.getFolderById(IMAGE_FOLDER_ID);
-      const file = folder.createFile(blob);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      return "https://drive.google.com/uc?export=view&id=" + file.getId();
-    } catch (e) {
-      return '';
-    }
-  }
-
-  let imgBeforeUrl = '';
-  if (defectData.imgBefore) {
-    const ts = new Date().getTime();
-    imgBeforeUrl = uploadBase64(defectData.imgBefore, `Before_${newId}_${ts}`);
-  }
-
-  const rowData = new Array(15).fill('');
-  
-  rowData[0] = newId;                        // Col A: DefectID
-  rowData[1] = taskId;                       // Col B: TaskID
-  rowData[4] = 'ยังไม่แก้ไข';                  // Col E: Status
-  rowData[5] = defectData.mainCategory;      // Col F: ลักษณะงานหลัก
-  rowData[6] = defectData.subCategory;       // Col G: ลักษณะงานรอง
-  rowData[7] = defectData.description;       // Col H: รายละเอียด
-  rowData[8] = defectData.major;             // Col I: Major
-  rowData[9] = defectData.team;              // Col J: ทีมเข้าแก้ไข
-  rowData[10] = '';                          // Col K: รูปภาพเลขยูนิต
-  rowData[11] = imgBeforeUrl;                // Col L: รูปภาพก่อนแก้ไข
-  rowData[12] = '';                          // Col M: รูปภาพระหว่างแก้ไข
-  rowData[13] = '';                          // Col N: รูปภาพหลังแก้ไข
-  rowData[14] = new Date();                  // Col O: Timestamp
-
-  sheet.appendRow(rowData);
-  return newId;
-}
-
-// ยังคงเก็บฟังก์ชันเดิมไว้เผื่อกรณีต้องการใช้ (ไม่กระทบการทำงานใหม่)
-function uploadDefectImages(defectId, imagesPayload) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('DEFECT');
-  const data = sheet.getDataRange().getValues();
-  
-  let rowIndex = -1;
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === defectId) {
-      rowIndex = i + 1;
-      break;
-    }
-  }
-  if (rowIndex === -1) return "Defect not found";
-
-  function uploadBase64(base64Str, filename) {
-    if (!base64Str) return '';
-    if (base64Str.startsWith('http')) return base64Str; 
-    try {
-      const splitBase = base64Str.split(',');
-      const contentType = splitBase[0].split(';')[0].replace('data:', '');
-      const byteCharacters = Utilities.base64Decode(splitBase[1]);
-      const blob = Utilities.newBlob(byteCharacters, contentType, filename);
-      const file = DriveApp.createFile(blob);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      return file.getUrl();
-    } catch (e) {
-      return '';
-    }
-  }
-
-  const ts = new Date().getTime();
-  
-  const imgUnitUrl = imagesPayload.imgUnit ? uploadBase64(imagesPayload.imgUnit, `Unit_${defectId}_${ts}`) : data[rowIndex-1][10];
-  const imgBeforeUrl = imagesPayload.imgBefore ? uploadBase64(imagesPayload.imgBefore, `Before_${defectId}_${ts}`) : data[rowIndex-1][11];
-  const imgDuringUrl = imagesPayload.imgDuring ? uploadBase64(imagesPayload.imgDuring, `During_${defectId}_${ts}`) : data[rowIndex-1][12];
-  const imgAfterUrl = imagesPayload.imgAfter ? uploadBase64(imagesPayload.imgAfter, `After_${defectId}_${ts}`) : data[rowIndex-1][13];
-
-  sheet.getRange(rowIndex, 11).setValue(imgUnitUrl);
-  sheet.getRange(rowIndex, 12).setValue(imgBeforeUrl);
-  sheet.getRange(rowIndex, 13).setValue(imgDuringUrl);
-  sheet.getRange(rowIndex, 14).setValue(imgAfterUrl);
-
-  return "Success";
-}
-
-function updateJob(formData) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('JOB');
-  const data = sheet.getDataRange().getValues();
-  
-  let rowIndex = -1;
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === formData.id) {
-      rowIndex = i + 1;
-      break;
-    }
-  }
-
-  if (rowIndex === -1) {
-    throw new Error("ไม่พบ JobID ที่ต้องการแก้ไขในฐานข้อมูล");
-  }
-
-  sheet.getRange(rowIndex, 2).setValue(formData.site || '');
-  sheet.getRange(rowIndex, 3).setValue(formData.owner || '');
-  sheet.getRange(rowIndex, 4).setValue(formData.ownerCompany || '');
-  sheet.getRange(rowIndex, 5).setValue(formData.staff || '');
-  sheet.getRange(rowIndex, 6).setValue(formData.replyDueDate || '');
-  sheet.getRange(rowIndex, 7).setValue(formData.remark || '');
-
-  return "Update Success";
-}
-
-function getMasterData() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  let result = { sites: [], owners: [] };
-
-  const projectSheet = ss.getSheetByName('Project');
-  if (projectSheet) {
-    const pLastRow = projectSheet.getLastRow();
-    if (pLastRow >= 2) {
-      const pData = projectSheet.getRange(2, 2, pLastRow - 1, 1).getDisplayValues();
-      const sites = pData.map(r => r[0]).filter(s => s !== '');
-      result.sites = [...new Set(sites)];
-    }
-  }
-
-  const ownerSheet = ss.getSheetByName('Owner');
-  if (ownerSheet) {
-    const oLastRow = ownerSheet.getLastRow();
-    if (oLastRow >= 2) {
-      const oData = ownerSheet.getRange(2, 2, oLastRow - 1, 3).getDisplayValues();
-      result.owners = oData
-        .filter(row => row[2] !== '') 
-        .map(row => ({
-          ownerCompany: row[0], 
-          site: row[1],         
-          owner: row[2]         
-        }));
-    }
-  }
-
-  return JSON.stringify(result);
-}
-
-function deleteJob(jobId) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('JOB');
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === jobId) {
-      sheet.deleteRow(i + 1);
-      return "Success";
-    }
-  }
-  throw new Error("ไม่พบ JobID ที่ต้องการลบ");
-}
-
-function deleteTask(taskId) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('TASK');
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === taskId) {
-      sheet.deleteRow(i + 1);
-      return "Success";
-    }
-  }
-  throw new Error("ไม่พบ TaskID ที่ต้องการลบ");
-}
-
-function deleteDefect(defectId) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('DEFECT');
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === defectId) {
-      sheet.deleteRow(i + 1);
-      return "Success";
-    }
-  }
-  throw new Error("ไม่พบ DefectID ที่ต้องการลบ");
-}
-
-// --- ฟังก์ชันเปลี่ยนสถานะ ---
-function updateTaskStatusAndJob(taskId, newStatus) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const taskSheet = ss.getSheetByName('TASK');
-  const taskData = taskSheet.getDataRange().getValues();
-
-  let jobId = '';
-  let taskRowIndex = -1;
-
-  for (let i = 1; i < taskData.length; i++) {
-    if (taskData[i][0] === taskId) {
-      taskRowIndex = i + 1;
-      jobId = taskData[i][1]; // ดึง JobID ในคอลัมน์ B (Index 1)
-      taskData[i][5] = newStatus; // อัปเดตสถานะจำลองใน Array เพื่อใช้เช็คเงื่อนไขทันที
-      break;
-    }
-  }
-  
-  if (taskRowIndex !== -1) {
-    // 1. อัปเดตสถานะของ Task ในคอลัมน์ F (ตำแหน่งที่ 6)
-    taskSheet.getRange(taskRowIndex, 6).setValue(newStatus);
-
-    // 2. เงื่อนไขอัปเดต Job หลัก
-    if (jobId) {
-       const jobSheet = ss.getSheetByName('JOB');
-       const jobData = jobSheet.getDataRange().getValues();
-       
-       // เช็คสถานะของทุกใบงานย่อยภายใต้ Job เดียวกัน
-       let allTasksFinished = true;
-       for (let i = 1; i < taskData.length; i++) {
-         if (taskData[i][1] === jobId) {
-           const status = taskData[i][5];
-           // ถ้ายังมีงานที่ 'รอดำเนินการ', 'Active' หรือไม่มีสถานะ ถือว่างานหลักยังไม่จบ
-           if (status === 'รอดำเนินการ' || status === 'Active' || status === '') {
-             allTasksFinished = false;
-             break;
-           }
-         }
-       }
-
-       let jobRowIndex = -1;
-       for (let j = 1; j < jobData.length; j++) {
-         if (jobData[j][0] === jobId) {
-           jobRowIndex = j + 1;
-           break;
-         }
-       }
-
-       if (jobRowIndex !== -1) {
-         if (allTasksFinished) {
-           // เงื่อนไขใหม่: ถ้าทุกใบงานย่อยไม่มี รอดำเนินการ/Active แล้ว ให้ปิดใบงานหลัก
-           jobSheet.getRange(jobRowIndex, 9).setValue('Closed');
-         } else if (newStatus === 'Active') {
-           // เงื่อนไขเดิม: ถ้ามีการเปลี่ยน Task เป็น Active ให้ Job หลักเป็น Active
-           if (jobData[jobRowIndex - 1][8] !== 'Active') { 
-             jobSheet.getRange(jobRowIndex, 9).setValue('Active');
-           }
-         }
-       }
-    }
-    
-    // บังคับบันทึกข้อมูลทันทีก่อนแจ้ง Frontend ว่าสำเร็จ
-    SpreadsheetApp.flush();
-    return "Success";
-  }
-  throw new Error("ไม่พบข้อมูลใบงานย่อยที่ต้องการเปลี่ยนสถานะ");
-}
-
-// --- ฟังก์ชันอัปโหลดรูปภาพทีละรูป (NEW) ---
-function uploadSingleDefectImage(defectId, field, base64Str) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('DEFECT');
-  const data = sheet.getDataRange().getValues();
-  
-  let rowIndex = -1;
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === defectId) {
-      rowIndex = i + 1;
-      break;
-    }
-  }
-  if (rowIndex === -1) throw new Error("Defect not found");
-
-  if (!base64Str) return '';
-  if (base64Str.startsWith('http')) return base64Str; 
-
-  try {
-    const splitBase = base64Str.split(',');
-    const contentType = splitBase[0].split(';')[0].replace('data:', '');
-    const byteCharacters = Utilities.base64Decode(splitBase[1]);
-    
-    const ts = new Date().getTime();
-    const filename = `${field}_${defectId}_${ts}`;
-    const blob = Utilities.newBlob(byteCharacters, contentType, filename);
-    
-    // --- ส่วนที่แก้ไข: เล็งเป้าหมายไปที่โฟลเดอร์ ---
-    const folder = DriveApp.getFolderById(IMAGE_FOLDER_ID);
-    const file = folder.createFile(blob);
-    // ----------------------------------------
-    
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    
-    const url = "https://drive.google.com/uc?export=view&id=" + file.getId();
-    
-    const colMap = { 'imgUnit': 11, 'imgBefore': 12, 'imgDuring': 13, 'imgAfter': 14 };
-    if (colMap[field]) {
-      sheet.getRange(rowIndex, colMap[field]).setValue(url);
-    }
-    return url;
-  } catch (e) {
-    throw new Error('Upload failed: ' + e.toString());
-  }
-}
-
-// --- ฟังก์ชันอัปเดตสถานะ Defect (NEW) ---
-function updateDefectStatus(defectId, status) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('DEFECT');
-  const data = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === defectId) {
-      // คอลัมน์ Status ของ DEFECT อยู่ที่คอลัมน์ E (ตำแหน่งที่ 5)
-      sheet.getRange(i + 1, 5).setValue(status);
-      return "Success";
-    }
-  }
-  throw new Error("ไม่พบข้อมูล DefectID ที่ต้องการเปลี่ยนสถานะ");
-}
-
-// --- ฟังก์ชัน Export PDF แผนเข้าแก้ไข ---
-function exportTaskPlansToPDF(jobId) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const allDataStr = getAllData();
-  const allJobs = JSON.parse(allDataStr);
-  const job = allJobs.find(j => j.id === jobId);
-
-  if (!job) throw new Error("ไม่พบข้อมูลใบงานหลัก (Job)");
-  if (!job.tasks || job.tasks.length === 0) throw new Error("ไม่มีใบงานย่อยให้ Export");
-
-  const folder = DriveApp.getFolderById(IMAGE_FOLDER_ID);
-  let exportedFiles = [];
-
-  // แก้ปัญหาภาพไม่ขึ้น: ดึงไฟล์จาก Drive แปลงเป็น Base64 เพื่อฝังลงใน PDF โดยตรง
-  const getPrintableImgUrl = (url) => {
-    if (!url) return '';
-    if (url.startsWith('data:image')) return url;
-    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) {
-      try {
-        const fileId = match[1];
-        const file = DriveApp.getFileById(fileId);
-        const blob = file.getBlob();
-        const base64 = Utilities.base64Encode(blob.getBytes());
-        const mimeType = blob.getContentType();
-        return `data:${mimeType};base64,${base64}`;
-      } catch (e) {
-        // Fallback กรณีดึงไฟล์ไม่ได้
-        return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w500`;
-      }
-    }
-    return url;
-  };
-
-  job.tasks.forEach(task => {
-    let html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="UTF-8">
-        <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-        <style>
-          body { 
-            font-family: 'Sarabun', sans-serif; 
-            color: #1e293b; 
-            line-height: 1.6; 
-            font-size: 14px; 
-            margin: 0; 
-            padding: 10px;
+        // 2. โหลดรูปภาพลง Canvas และใส่ลายน้ำ
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.onload = () => {
+          // คำนวณขนาด (ย่อรูปถ้าใหญ่เกินไปเพื่อไม่ให้ไฟล์หนัก)
+          const MAX_WIDTH = 1200;
+          let width = img.width;
+          let height = img.height;
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
           }
-          .header-title { 
-            text-align: center; 
-            color: #0f172a; 
-            margin-bottom: 25px; 
-            font-size: 24px; 
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-          }
-          table.header-table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            margin-bottom: 30px; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-          }
-          table.header-table th, table.header-table td { 
-            border: 1px solid #cbd5e1; 
-            padding: 10px 12px; 
-            text-align: left; 
-            vertical-align: top;
-          }
-          table.header-table th { 
-            background-color: #f1f5f9; 
-            width: 18%; 
-            font-weight: 600; 
-            color: #334155;
-          }
-          table.header-table td {
-            width: 32%;
-            color: #0f172a;
-          }
+          canvas.width = width;
+          canvas.height = height;
           
-          .section-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #1e40af;
-            border-bottom: 2px solid #93c5fd;
-            padding-bottom: 8px;
-            margin-bottom: 15px;
-          }
+          // วาดรูปลง Canvas
+          ctx.drawImage(img, 0, 0, width, height);
 
-          .defect-card { 
-            border: 1px solid #e2e8f0; 
-            margin-bottom: 20px; 
-            padding: 15px; 
-            page-break-inside: avoid; 
-            border-radius: 8px; 
-            background-color: #ffffff;
-          }
-          .defect-layout { 
-            display: table; 
-            width: 100%; 
-          }
-          .img-col { 
-            display: table-cell; 
-            width: 200px; 
-            vertical-align: top; 
-            text-align: center; 
-            padding-right: 20px; 
-            border-right: 1px dashed #cbd5e1; 
-          }
-          .info-col { 
-            display: table-cell; 
-            vertical-align: top; 
-            padding-left: 20px; 
-          }
+          // ใส่ลายน้ำ (Timestamp + Location)
+          const timestamp = new Date().toLocaleString('th-TH');
+          const watermarkText = `${timestamp} | ${location}`;
           
-          .img-col img { 
-            max-width: 100%; 
-            max-height: 200px; 
-            border-radius: 6px; 
-            border: 1px solid #e2e8f0; 
-            padding: 3px;
-          }
-          .no-img { 
-            width: 100%; 
-            height: 120px; 
-            background: #f8fafc; 
-            border: 2px dashed #cbd5e1; 
-            border-radius: 6px;
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            color: #94a3b8; 
-            font-size: 13px; 
-            margin-top: 10px;
-          }
+          ctx.font = `bold ${Math.max(16, width * 0.03)}px Sarabun, sans-serif`;
+          ctx.fillStyle = 'yellow';
+          ctx.strokeStyle = 'black';
+          ctx.lineWidth = 3;
+          ctx.textBaseline = 'bottom';
+          ctx.textAlign = 'right';
           
-          .meta { margin-bottom: 6px; color: #475569; }
-          .meta strong { color: #1e293b; font-weight: 600;}
-          .major { color: #dc2626; font-weight: 700; background-color: #fef2f2; padding: 2px 6px; border-radius: 4px; font-size: 12px;}
+          // วาดขอบดำและตัวหนังสือสีเหลืองที่มุมขวาล่าง
+          ctx.strokeText(watermarkText, width - 20, height - 20);
+          ctx.fillText(watermarkText, width - 20, height - 20);
           
-          .desc-box { 
-            background-color: #f8fafc; 
-            border-left: 4px solid #3b82f6; 
-            padding: 12px 15px; 
-            margin: 15px 0; 
-            font-size: 15px; 
-            color: #334155; 
-            display: block;
-            border-radius: 0 6px 6px 0;
-          }
-          .desc-box strong { color: #0f172a; display: block; margin-bottom: 4px; font-size: 14px;}
+          // ตั้งค่าสำหรับปากกาวาด (Annotate)
+          ctx.strokeStyle = 'red';
+          ctx.lineWidth = Math.max(3, width * 0.005);
+          ctx.lineCap = 'round';
+        };
+        img.src = imageSrc;
+      }, [imageSrc, location]);
 
-          .date-badge { 
-            display: inline-block; 
-            background-color: #fffbeb; 
-            border: 1px solid #fde68a; 
-            color: #b45309; 
-            padding: 6px 12px; 
-            font-weight: 600; 
-            font-size: 13px; 
-            border-radius: 6px; 
-          }
-
-          /* --- ส่วนลายเซ็น (Signature Section) --- */
-          .signature-container {
-              width: 100%;
-              margin-top: 50px;
-              page-break-inside: avoid;
-          }
-          .signature-table {
-              width: 100%;
-              border-collapse: collapse;
-              text-align: center;
-          }
-          .signature-table td {
-              width: 50%;
-              padding: 10px 20px;
-              vertical-align: bottom;
-          }
-          .sign-line {
-              border-bottom: 1px dashed #94a3b8;
-              width: 70%;
-              margin: 40px auto 10px auto;
-          }
-          .sign-text {
-              color: #334155;
-              font-size: 14px;
-              line-height: 1.5;
-          }
-          .sign-name {
-              font-weight: 600;
-              color: #0f172a;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header-title">แผนเข้าแก้ไข (Repair Plan)</div>
-        <table class="header-table">
-          <tr>
-            <th>Job ID</th><td>${job.id}</td>
-            <th>Task ID</th><td>${task.id}</td>
-          </tr>
-          <tr>
-            <th>Site</th><td>${job.site}</td>
-            <th>Scope</th><td>${task.scope}</td>
-          </tr>
-          <tr>
-            <th>Owner / ผู้ดูแล</th><td>${job.owner}</td>
-            <th>Building / Unit</th><td>${task.building} - ${task.unit}</td>
-          </tr>
-          <tr>
-            <th>Company</th><td>${job.ownerCompany || '-'}</td>
-            <th>ชื่อลูกค้า</th><td>${task.customerName || '-'}</td>
-          </tr>
-          <tr>
-            <th>Staff / ผู้จัดทำ</th><td colspan="3">${job.staff || '-'}</td>
-          </tr>
-        </table>
-
-        <div class="section-title">รายการ Defect ที่ต้องดำเนินการ</div>
-    `;
-
-    if (task.defects && task.defects.length > 0) {
-      task.defects.forEach((def) => {
-        let printImg = getPrintableImgUrl(def.imgBefore);
-        let imgTag = printImg ? `<img src="${printImg}" />` : `<div class="no-img">ไม่มีรูปภาพก่อนแก้ไข</div>`;
-        
-        html += `
-        <div class="defect-card">
-          <div class="defect-layout">
-            <div class="img-col">
-              ${imgTag}
-            </div>
-            <div class="info-col">
-              <div class="meta"><strong>ลักษณะงานหลัก:</strong> ${def.mainCategory} &nbsp;|&nbsp; <strong>ลักษณะงานรอง:</strong> ${def.subCategory}</div>
-              <div class="meta"><strong>ทีมเข้าแก้ไข:</strong> ${def.team} &nbsp;|&nbsp; <strong>Major:</strong> <span class="${def.major === 'ใช่' ? 'major' : ''}">${def.major || 'ไม่ใช่'}</span></div>
-              
-              <div class="desc-box">
-                <strong>รายละเอียดปัญหา:</strong>
-                ${def.description}
-              </div>
-              
-              <div class="date-badge">
-                📅 กำหนดวันเข้าแก้ไข: ${task.targetFixDate || 'ยังไม่ได้ระบุวันที่'}
-              </div>
-            </div>
-          </div>
-        </div>
-        `;
-      });
-    } else {
-      html += `<p style="text-align:center; color:#94a3b8; padding: 30px 0; font-style: italic;">- ไม่มีรายการ Defect ในใบงานย่อยนี้ -</p>`;
-    }
-
-    // --- ส่วน HTML ลายเซ็นต์ท้ายเอกสาร ---
-    html += `
-        <div class="signature-container">
-            <table class="signature-table">
-                <tr>
-                    <td>
-                        <div class="sign-line"></div>
-                        <div class="sign-text sign-name">( ${job.staff || '.........................................................'} )</div>
-                        <div class="sign-text">ผู้จัดทำแผน (Staff)</div>
-                        <div class="sign-text" style="margin-top: 5px;">วันที่: ......../......../..............</div>
-                    </td>
-                    <td>
-                        <div class="sign-line"></div>
-                        <div class="sign-text sign-name">( ${job.owner || '.........................................................'} )</div>
-                        <div class="sign-text">ผู้อนุมัติ (Owner)</div>
-                        <div class="sign-text" style="margin-top: 5px;">วันที่: ......../......../..............</div>
-                    </td>
-                </tr>
-            </table>
-        </div>
-    `;
-
-    html += `</body></html>`;
-
-    // แปลงเนื้อหาเป็น PDF
-    const blob = Utilities.newBlob(html, MimeType.HTML).getAs(MimeType.PDF).setName(`RepairPlan_${task.id}.pdf`);
-    const file = folder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    
-    exportedFiles.push({ taskId: task.id, url: file.getUrl() });
-  });
-
-  return JSON.stringify(exportedFiles);
-}
-
-// --- ฟังก์ชัน Export PDF เอกสารแก้ไข Defect (NEW) ---
-function exportDefectReportToPDF(taskId) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const allDataStr = getAllData();
-  const allJobs = JSON.parse(allDataStr);
-  
-  let targetTask = null;
-  let targetJob = null;
-  
-  // ค้นหา Job และ Task ที่ตรงกับ taskId
-  for (const job of allJobs) {
-    const foundTask = job.tasks.find(t => t.id === taskId);
-    if (foundTask) {
-      targetTask = foundTask;
-      targetJob = job;
-      break;
-    }
-  }
-
-  if (!targetTask) throw new Error("ไม่พบข้อมูลใบงานย่อย (Task)");
-
-  const folder = DriveApp.getFolderById(IMAGE_FOLDER_ID);
-  
-  // ฟังก์ชันย่อยสำหรับแปลงรูปเป็น Base64 ฝัง PDF
-  const getPrintableImgUrl = (url) => {
-    if (!url) return '';
-    if (url.startsWith('data:image')) return url;
-    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) {
-      try {
-        const file = DriveApp.getFileById(match[1]);
-        const blob = file.getBlob();
-        const base64 = Utilities.base64Encode(blob.getBytes());
-        const mimeType = blob.getContentType();
-        return `data:${mimeType};base64,${base64}`;
-      } catch (e) {
-        return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w500`;
-      }
-    }
-    return url;
-  };
-
-  let html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="UTF-8">
-        <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-        <style>
-          body { font-family: 'Sarabun', sans-serif; color: #1e293b; line-height: 1.6; font-size: 14px; margin: 0; padding: 10px; }
-          .header-title { text-align: center; color: #0f172a; margin-bottom: 25px; font-size: 24px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-          table.header-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-          table.header-table th, table.header-table td { border: 1px solid #cbd5e1; padding: 10px 12px; text-align: left; vertical-align: top; }
-          table.header-table th { background-color: #f1f5f9; width: 18%; font-weight: 600; color: #334155; }
-          table.header-table td { width: 32%; color: #0f172a; }
-          .section-title { font-size: 18px; font-weight: 600; color: #1e40af; border-bottom: 2px solid #93c5fd; padding-bottom: 8px; margin-bottom: 15px; }
-          
-          .defect-card { border: 1px solid #e2e8f0; margin-bottom: 25px; padding: 15px; page-break-inside: avoid; border-radius: 8px; background-color: #ffffff; }
-          .defect-info { margin-bottom: 15px; padding: 12px; background-color: #f8fafc; border-radius: 6px; border-left: 4px solid #3b82f6; }
-          .defect-info strong { color: #0f172a; }
-          
-          .img-grid { display: table; width: 100%; table-layout: fixed; margin-top: 15px; }
-          .img-cell { display: table-cell; width: 25%; padding: 0 5px; text-align: center; vertical-align: top; }
-          .img-cell img { width: 100%; max-height: 180px; object-fit: contain; border: 1px solid #cbd5e1; border-radius: 6px; padding: 2px; }
-          .img-label { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: #1e40af; background-color: #eff6ff; padding: 4px 0; border-radius: 4px; }
-          .no-img { height: 120px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 12px; margin-top: 5px; }
-
-          .signature-container { width: 100%; margin-top: 50px; page-break-inside: avoid; }
-          .signature-table { width: 100%; border-collapse: collapse; text-align: center; }
-          .signature-table td { width: 50%; padding: 10px 20px; vertical-align: bottom; }
-          .sign-line { border-bottom: 1px dashed #94a3b8; width: 70%; margin: 40px auto 10px auto; }
-          .sign-text { color: #334155; font-size: 14px; line-height: 1.5; }
-          .sign-name { font-weight: 600; color: #0f172a; }
-        </style>
-      </head>
-      <body>
-        <div class="header-title">เอกสารแก้ไข Defect</div>
-        <table class="header-table">
-          <tr>
-            <th>Job ID</th><td>${targetJob.id}</td>
-            <th>Task ID</th><td>${targetTask.id}</td>
-          </tr>
-          <tr>
-            <th>Site</th><td>${targetJob.site}</td>
-            <th>Scope</th><td>${targetTask.scope}</td>
-          </tr>
-          <tr>
-            <th>Owner / ผู้ดูแล</th><td>${targetJob.owner}</td>
-            <th>Building / Unit</th><td>${targetTask.building} - ${targetTask.unit}</td>
-          </tr>
-          <tr>
-            <th>Company</th><td>${targetJob.ownerCompany || '-'}</td>
-            <th>ชื่อลูกค้า</th><td>${targetTask.customerName || '-'}</td>
-          </tr>
-          <tr>
-            <th>Staff / ผู้จัดทำ</th><td colspan="3">${targetJob.staff || '-'}</td>
-          </tr>
-        </table>
-
-        <div class="section-title">รายละเอียดผลการแก้ไข Defect</div>
-  `;
-
-  if (targetTask.defects && targetTask.defects.length > 0) {
-    targetTask.defects.forEach((def) => {
-      let imgUnit = getPrintableImgUrl(def.imgUnit);
-      let imgBefore = getPrintableImgUrl(def.imgBefore);
-      let imgDuring = getPrintableImgUrl(def.imgDuring);
-      let imgAfter = getPrintableImgUrl(def.imgAfter);
-
-      const renderImg = (src, label) => `
-        <div class="img-cell">
-          <div class="img-label">${label}</div>
-          ${src ? `<img src="${src}" />` : `<div class="no-img">ไม่มีรูปภาพ</div>`}
-        </div>
-      `;
-
-      html += `
-      <div class="defect-card">
-        <div class="defect-info">
-          <div style="margin-bottom: 6px;">
-            <strong>สถานะ:</strong> <span style="color: #047857; font-weight: 600;">${def.status}</span> &nbsp;|&nbsp; 
-            <strong>ลักษณะงานหลัก:</strong> ${def.mainCategory} &nbsp;|&nbsp; 
-            <strong>ลักษณะงานรอง:</strong> ${def.subCategory}
-          </div>
-          <div style="margin-bottom: 6px;">
-            <strong>ทีมเข้าแก้ไข:</strong> ${def.team}
-          </div>
-          <div>
-            <strong>รายละเอียด:</strong> ${def.description}
-          </div>
-        </div>
-        
-        <div class="img-grid">
-          ${renderImg(imgUnit, '1. รูปภาพเลขยูนิต')}
-          ${renderImg(imgBefore, '2. รูปภาพก่อนแก้ไข')}
-          ${renderImg(imgDuring, '3. รูปภาพระหว่างแก้ไข')}
-          ${renderImg(imgAfter, '4. รูปภาพหลังแก้ไข')}
-        </div>
-      </div>
-      `;
-    });
-  } else {
-    html += `<p style="text-align:center; color:#94a3b8; padding: 30px 0; font-style: italic;">- ไม่มีรายการ Defect ในใบงานย่อยนี้ -</p>`;
-  }
-
-  // ลายเซ็นต์ Owner (จาก Job) และ ลูกค้า (จาก Task)
-  html += `
-        <div class="signature-container">
-            <table class="signature-table">
-                <tr>
-                    <td>
-                        <div class="sign-line"></div>
-                        <div class="sign-text sign-name">( ${targetJob.owner || '.........................................................'} )</div>
-                        <div class="sign-text">ผู้อนุมัติ (Owner)</div>
-                        <div class="sign-text" style="margin-top: 5px;">วันที่: ......../......../..............</div>
-                    </td>
-                    <td>
-                        <div class="sign-line"></div>
-                        <div class="sign-text sign-name">( ${targetTask.customerName || '.........................................................'} )</div>
-                        <div class="sign-text">ลูกค้า (Customer)</div>
-                        <div class="sign-text" style="margin-top: 5px;">วันที่: ......../......../..............</div>
-                    </td>
-                </tr>
-            </table>
-        </div>
-      </body>
-    </html>
-  `;
-
-  const blob = Utilities.newBlob(html, MimeType.HTML).getAs(MimeType.PDF).setName(`DefectReport_${targetTask.id}.pdf`);
-  const file = folder.createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  
-  return JSON.stringify({ taskId: targetTask.id, url: file.getUrl() });
-}
-
-// --- ฟังก์ชันสำหรับระบบ Auth ---
-function registerUser(formData) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  let sheet = ss.getSheetByName('User');
-  if (!sheet) {
-    initSheets();
-    sheet = ss.getSheetByName('User');
-  }
-  
-  const data = sheet.getDataRange().getValues();
-  const inputUserId = String(formData.userId).trim();
-
-  // เช็คว่า User ID ซ้ำหรือไม่
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]).trim() === inputUserId) {
-      throw new Error('User ID นี้มีผู้ใช้งานแล้ว กรุณาใช้ชื่ออื่น');
-    }
-  }
-
-  // บันทึกข้อมูลลง Sheet (Col A = UserID, Col B = Password, Col E = Position, Col J = Email, Col K = Line, Col L = Phone, Col N = Timestamp)
-  // สร้าง Array เปล่าๆ ความยาว 14 เพื่อให้ Timestamp ไปตกที่คอลัมน์ที่ 14 (Col N)
-  const newRow = new Array(15).fill('');
-  newRow[0] = formData.userId;
-  newRow[1] = "'" + formData.password; // เติม ' นำหน้า Password บังคับให้เป็น Text
-  newRow[4] = formData.position;       // Col E: Position
-  newRow[9] = formData.email;          // Col J: Email
-  newRow[10] = formData.line;          // Col K: Line
-  newRow[11] = formData.phone;         // Col L: Phone
-  newRow[14] = new Date();             // Index ที่ 13 คือ Col N
-
-  sheet.appendRow(newRow);
-  
-  return 'Success';
-}
-
-function loginUser(userId, password) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('User');
-  if (!sheet) throw new Error('ไม่พบฐานข้อมูลผู้ใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
-
-  const data = sheet.getDataRange().getValues();
-  
-  // แปลงค่าที่ส่งมาเป็น String และตัดช่องว่างซ้ายขวา
-  const inputUserId = String(userId).trim();
-  const inputPassword = String(password).trim();
-
-  for (let i = 1; i < data.length; i++) {
-    const sheetUserId = String(data[i][0]).trim();
-    let sheetPassword = String(data[i][1]).trim();
-    
-    // ลบเครื่องหมาย ' ออก หากมีติดมาจากการบันทึกแบบบังคับเป็นข้อความ
-    if (sheetPassword.startsWith("'")) {
-        sheetPassword = sheetPassword.substring(1);
-    }
-
-    // เช็ค User ID และ Password
-    if (sheetUserId === inputUserId && sheetPassword === inputPassword) {
-      return { 
-        userId: data[i][0], 
-        fullName: data[i][0] // เอาชื่อ-นามสกุลออก จึงส่ง UserID ไปแสดงผลแทน
+      // ฟังก์ชันวาดเส้น
+      const startDrawing = (e) => {
+        setIsDrawing(true);
+        draw(e);
       };
+      
+      const finishDrawing = () => {
+        setIsDrawing(false);
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.beginPath();
+      };
+      
+      const draw = (e) => {
+        if (!isDrawing) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        
+        // รองรับทั้ง Mouse และ Touch
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (clientX - rect.left) * scaleX;
+        const y = (clientY - rect.top) * scaleY;
+
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+      };
+
+      const handleSave = () => {
+        const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.8); // เซฟเป็น Base64
+        onSave(field, dataUrl);
+      };
+
+      return (
+        <div className="fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-4">
+          <div className="text-white mb-2 flex justify-between w-full max-w-2xl">
+            <span className="font-bold">ใช้นิ้ววาดเพื่อเน้นจุด (Annotate)</span>
+            <button onClick={onClose} className="text-red-400 hover:text-red-300"><IconX /></button>
+          </div>
+          
+          <div className="relative border-2 border-gray-600 bg-gray-900 overflow-hidden w-full max-w-2xl" style={{ maxHeight: '70vh' }}>
+            <canvas 
+              ref={canvasRef}
+              onMouseDown={startDrawing} onMouseUp={finishDrawing} onMouseMove={draw} onMouseLeave={finishDrawing}
+              onTouchStart={startDrawing} onTouchEnd={finishDrawing} onTouchMove={draw}
+              className="w-full h-auto touch-none cursor-crosshair"
+            />
+          </div>
+          
+          <div className="flex gap-4 mt-6 w-full max-w-2xl">
+            <button onClick={onClose} className="flex-1 py-3 bg-gray-700 text-white rounded-lg font-bold">ยกเลิก</button>
+            <button onClick={handleSave} className="flex-1 py-3 bg-emerald-600 text-white rounded-lg font-bold flex items-center justify-center">
+              <span className="mr-2"><IconCheckCircle/></span> ยืนยันและนำไปใช้
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    // --- Component จัดการอัปโหลดรูป ---
+    const DefectImagesUploader = ({ defect, taskStatus, onSuccess }) => {
+      const [images, setImages] = useState({
+        imgUnit: defect.imgUnit || '',
+        imgBefore: defect.imgBefore || '',
+        imgDuring: defect.imgDuring || '',
+        imgAfter: defect.imgAfter || ''
+      });
+      const [uploadingField, setUploadingField] = useState(null);
+      const [isSavingStatus, setIsSavingStatus] = useState(false);
+      const [editingImage, setEditingImage] = useState(null);
+
+      const isTaskActive = taskStatus === 'Active';
+      const isTaskRejected = taskStatus === 'Reject';
+      const isTaskClosed = taskStatus === 'Closed';
+      const isDefectFixed = defect.status === 'แก้ไขแล้ว';
+
+      const handleFileChange = (field, e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            // โยนเข้า State เพื่อเปิดหน้า Modal วาดรูป
+            setEditingImage({ field: field, src: reader.result });
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+
+      // ฟังก์ชันรับรูปภาพที่วาด/ใส่ลายน้ำเสร็จแล้ว
+      const handleAnnotatorSave = (field, dataUrl) => {
+        setImages(prev => ({ ...prev, [field]: dataUrl }));
+        setEditingImage(null); // ปิดหน้าต่าง
+      };
+
+      const handleUploadSingle = (field) => {
+        setUploadingField(field);
+        google.script.run
+          .withSuccessHandler(url => {
+            setImages(prev => ({ ...prev, [field]: url }));
+            setUploadingField(null);
+            onSuccess(); // อัปเดตข้อมูลเบื้องหลัง
+          })
+          .withFailureHandler(err => {
+            alert('เกิดข้อผิดพลาดในการบันทึกรูป: ' + err.message);
+            setUploadingField(null);
+          })
+          .uploadSingleDefectImage(defect.id, field, images[field]);
+      };
+
+      const handleFinishDefect = () => {
+        setIsSavingStatus(true);
+        google.script.run
+          .withSuccessHandler(() => {
+            alert('เปลี่ยนสถานะ Defect เป็น "แก้ไขแล้ว" สำเร็จ');
+            setIsSavingStatus(false);
+            onSuccess(); 
+          })
+          .withFailureHandler(err => {
+            alert('เกิดข้อผิดพลาด: ' + err.message);
+            setIsSavingStatus(false);
+          })
+          .updateDefectStatus(defect.id, 'แก้ไขแล้ว');
+      };
+
+      const ImageBox = ({ label, field, disabledReason }) => {
+        const isDisabled = !!disabledReason;
+        const currentImg = images[field];
+        const isBase64 = currentImg && currentImg.startsWith('data:image');
+        const isUploaded = currentImg && currentImg.startsWith('http');
+        const isUploading = uploadingField === field;
+
+       // --- เพิ่มฟังก์ชันแปลง URL ของ Google Drive ตรงนี้ ---
+        const getDirectImageUrl = (url) => {
+          if (!url) return '';
+          if (url.startsWith('data:image')) return url;
+          // สกัดเอา ID ของไฟล์ออกมาจาก URL ปกติ
+          const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+          if (match && match[1]) {
+            // ใช้ Thumbnail API ของ Google Drive เพื่อแก้ปัญหาภาพโดนบล็อกใน Iframe
+            return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
+          }
+          return url;
+        };
+        // ---------------------------------------------
+
+        return (
+          <div className={`relative border rounded-xl p-4 flex flex-col items-center justify-between shadow-sm transition-all ${isDisabled ? 'bg-gray-100 border-gray-200' : isBase64 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200'}`}>
+            <h4 className="font-semibold text-gray-700 mb-3 text-sm text-center w-full pb-2 border-b">{label}</h4>
+            
+            <div className="flex-1 w-full flex flex-col items-center justify-center mb-4">
+              {currentImg ? (
+                <div className="relative group w-full flex justify-center">
+                  <img src={getDirectImageUrl(currentImg)} alt={label} className={`h-32 object-cover rounded-lg border shadow-sm ${isDisabled ? 'opacity-50' : ''}`} />
+                  {isUploaded && (
+                    <div className="absolute top-2 right-2 bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center shadow-md">
+                      <span className="mr-1"><IconCheckCircle/></span> บันทึกแล้ว
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className={`h-32 flex flex-col items-center justify-center w-full rounded-lg text-xs text-center p-4 border-2 border-dashed ${isDisabled ? 'text-gray-400 border-gray-200' : 'text-gray-400 border-gray-300 bg-gray-50'}`}>
+                  <svg className="w-8 h-8 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L28 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2 2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                  {isDisabled ? disabledReason : 'ยังไม่มีรูปภาพ'}
+                </div>
+              )}
+            </div>
+            
+            <div className="w-full flex flex-col gap-2">
+              <input 
+                type="file" 
+                accept="image/*" 
+                capture="environment" 
+                onChange={(e) => handleFileChange(field, e)} 
+                disabled={isDisabled || isTaskRejected || isDefectFixed || isTaskClosed} 
+                className={`text-xs w-full disabled:opacity-50 cursor-pointer file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 ${(isTaskRejected || isDefectFixed || isTaskClosed) ? 'hidden' : ''}`} 
+              />
+              
+              {isBase64 && (
+                <button
+                  onClick={() => handleUploadSingle(field)}
+                  disabled={isUploading}
+                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg shadow-md font-bold transition-colors flex justify-center items-center animate-pulse hover:animate-none"
+                >
+                  {isUploading ? 'กำลังบันทึก...' : 'คลิกเพื่อบันทึกรูปนี้'}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      };
+
+      const allImagesUploadedAndSaved = 
+        images.imgUnit && images.imgUnit.startsWith('http') &&
+        images.imgBefore && images.imgBefore.startsWith('http') &&
+        images.imgDuring && images.imgDuring.startsWith('http') &&
+        images.imgAfter && images.imgAfter.startsWith('http');
+
+      return (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mt-4">
+          
+          {/* ----- ส่วนเปิดหน้าต่าง Annotator ----- */}
+          {editingImage && (
+            <ImageAnnotator 
+              imageSrc={editingImage.src} 
+              field={editingImage.field} 
+              onSave={handleAnnotatorSave} 
+              onClose={() => setEditingImage(null)} 
+            />
+          )}
+          {/* ---------------------------------- */}
+
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-3">
+            <div>
+              <h3 className="text-xl font-bold text-gray-800">จัดการรูปภาพ (4 รูป)</h3>
+              <p className="text-sm text-gray-500 mt-1">อัปโหลดและบันทึกภาพให้ครบทั้ง 4 ขั้นตอนเพื่อจบงาน</p>
+            </div>
+            <div className="text-right">
+              {!isTaskActive && !isTaskRejected && !isTaskClosed && <span className="inline-block px-3 py-1 bg-amber-50 text-amber-700 text-sm font-medium rounded-md border border-amber-200">⚠️ ต้องเปิดใบงาน (Active) ก่อนอัปโหลดรูป</span>}
+              {isTaskRejected && <span className="inline-block px-3 py-1 bg-red-50 text-red-700 text-sm font-medium rounded-md border border-red-200">⚠️ ใบงานถูก Reject ไม่สามารถจัดการรูปได้</span>}
+              {isTaskClosed && <span className="inline-block px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded-md border border-gray-200">🔒 ใบงานถูกปิดแล้ว</span>}
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <ImageBox label="1. รูปภาพเลขยูนิต" field="imgUnit" disabledReason={!isTaskActive && !images['imgUnit'] ? "กรุณาเปิดใบงานก่อน" : null} />
+            <ImageBox label="2. รูปภาพก่อนแก้ไข" field="imgBefore" disabledReason={isTaskRejected ? "ไม่อนุญาต" : null} />
+            <ImageBox label="3. รูปภาพระหว่างแก้ไข" field="imgDuring" disabledReason={!isTaskActive && !images['imgDuring'] ? "กรุณาเปิดใบงานก่อน" : null} />
+            <ImageBox label="4. รูปภาพหลังแก้ไข" field="imgAfter" disabledReason={!isTaskActive && !images['imgAfter'] ? "กรุณาเปิดใบงานก่อน" : null} />
+          </div>
+          
+          <div className="mt-8 flex justify-end border-t pt-5">
+            <button 
+              onClick={handleFinishDefect} 
+              disabled={!allImagesUploadedAndSaved || isSavingStatus || isDefectFixed || isTaskClosed} 
+              className={`px-8 py-3 text-white rounded-lg flex items-center font-bold text-sm shadow-sm transition-all ${
+                isDefectFixed || isTaskClosed ? 'bg-gray-300 text-gray-600 cursor-not-allowed' 
+                : !allImagesUploadedAndSaved ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+                : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 shadow-lg hover:-translate-y-0.5'
+              }`}
+              title={!allImagesUploadedAndSaved ? 'ต้องบันทึกรูปภาพให้ครบ 4 รูปก่อน' : ''}
+            >
+              {isSavingStatus ? 'กำลังอัปเดตระบบ...' : 
+               isDefectFixed ? '✅ แก้ไข Defect เสร็จสิ้นแล้ว' : 
+               <><span className="mr-2"><IconCheckCircle/></span> ยืนยันแก้ไข Defect เสร็จสิ้น</>}
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    function App() {
+      // --- เพิ่ม State สำหรับ Auth ---
+      const [currentUser, setCurrentUser] = useState(null);
+      const [authMode, setAuthMode] = useState('LOGIN'); // 'LOGIN' หรือ 'REGISTER'
+      const [authForm, setAuthForm] = useState({ userId: '', password: '', confirmPassword: '', position: '', email: '', line: '', phone: '' });
+      const [authLoading, setAuthLoading] = useState(false);
+      const [authError, setAuthError] = useState('');
+
+      const POSITIONS = ['SAS Staff', 'Supplier'];
+
+      const [view, setView] = useState('JOB_LIST');
+      const [jobs, setJobs] = useState([]);
+      const [ownerMaster, setOwnerMaster] = useState([]);
+      const [uniqueSites, setUniqueSites] = useState([]);
+      
+      const [isLoading, setIsLoading] = useState(true);
+      const [isSaving, setIsSaving] = useState(false);
+      const [isDeleting, setIsDeleting] = useState(false);
+      const [isExportingPDF, setIsExportingPDF] = useState(false);
+      const [pdfLinks, setPdfLinks] = useState([]);
+      
+      const [activeJobId, setActiveJobId] = useState(null);
+      const [activeTaskId, setActiveTaskId] = useState(null);
+      const [activeDefectId, setActiveDefectId] = useState(null);
+      const [showJobForm, setShowJobForm] = useState(false);
+      const [showTaskForm, setShowTaskForm] = useState(false);
+      const [showDefectForm, setShowDefectForm] = useState(false);
+      const [editingJob, setEditingJob] = useState(null);
+      
+      const activeJob = jobs.find(j => j.id === activeJobId);
+      const activeTask = activeJob?.tasks?.find(t => t.id === activeTaskId);
+      const activeDefect = activeTask?.defects?.find(d => d.id === activeDefectId);
+
+      // --- ฟังก์ชันจัดการ Auth ---
+      const handleAuthSubmit = (e) => {
+        e.preventDefault();
+        setAuthError('');
+        setAuthLoading(true);
+
+        if (authMode === 'REGISTER') {
+          if (!authForm.userId || !authForm.password || !authForm.position) {
+            setAuthError('กรุณากรอกข้อมูลที่มีเครื่องหมาย * ให้ครบถ้วน');
+            setAuthLoading(false);
+            return;
+          }
+          if (authForm.password !== authForm.confirmPassword) {
+            setAuthError('รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน');
+            setAuthLoading(false);
+            return;
+          }
+          
+          google.script.run
+            .withSuccessHandler(() => {
+              alert('สมัครสมาชิกสำเร็จ กรุณาเข้าสู่ระบบ');
+              setAuthMode('LOGIN');
+              setAuthForm({ userId: '', password: '', confirmPassword: '', position: '', email: '', line: '', phone: '' });
+              setAuthLoading(false);
+            })
+            .withFailureHandler(err => {
+              setAuthError(err.message);
+              setAuthLoading(false);
+            })
+            .registerUser(authForm);
+            
+        } else {
+          // LOGIN
+          if (!authForm.userId || !authForm.password) {
+            setAuthError('กรุณากรอก User ID และ รหัสผ่าน');
+            setAuthLoading(false);
+            return;
+          }
+          
+          google.script.run
+            .withSuccessHandler((user) => {
+              setCurrentUser(user);
+              setAuthLoading(false);
+            })
+            .withFailureHandler(err => {
+              setAuthError(err.message);
+              setAuthLoading(false);
+            })
+            .loginUser(authForm.userId, authForm.password);
+        }
+      };
+      
+      const fetchData = () => {
+        setIsLoading(true);
+        google.script.run
+          .withSuccessHandler(data => {
+            setJobs(JSON.parse(data));
+            setIsLoading(false);
+          })
+          .withFailureHandler(err => {
+            console.error(err);
+            alert('เกิดข้อผิดพลาดในการโหลดข้อมูล');
+            setIsLoading(false);
+          })
+          .getAllData();
+      };
+      
+      const fetchMasterData = () => {
+        google.script.run
+          .withSuccessHandler(data => {
+            const parsed = JSON.parse(data);
+            setOwnerMaster(parsed.owners); 
+            setUniqueSites(parsed.sites);  
+          })
+          .withFailureHandler(err => console.error('Error fetching master data:', err))
+          .getMasterData(); 
+      };
+
+      useEffect(() => {
+        fetchData();
+        fetchMasterData();
+      }, []);
+      
+      // --- ฟังก์ชัน จัดการข้อมูล CRUD ---
+      const handleCreateJob = (formData) => {
+        setIsSaving(true);
+        google.script.run
+          .withSuccessHandler(newId => {
+            fetchData();
+            setShowJobForm(false);
+            setIsSaving(false);
+          })
+          .withFailureHandler(err => {
+            alert('เกิดข้อผิดพลาดในการสร้าง Job: ' + err.message);
+            setIsSaving(false);
+          })
+          .addJob(formData);
+      };
+      
+      const handleUpdateJob = (formData) => {
+        setIsSaving(true);
+        google.script.run
+          .withSuccessHandler(res => {
+            fetchData();
+            setShowJobForm(false);
+            setEditingJob(null);
+            setIsSaving(false);
+          })
+          .withFailureHandler(err => {
+            alert('เกิดข้อผิดพลาดในการแก้ไข Job: ' + err.message);
+            setIsSaving(false);
+          })
+          .updateJob(formData);
+      };
+
+      const handleDeleteJob = (id, e) => {
+        e.stopPropagation();
+        if (window.confirm(`⚠️ คุณต้องการลบใบงานหลัก ${id} ใช่หรือไม่?\nข้อมูล Task และ Defect ที่อยู่ภายใต้ใบงานนี้จะไม่แสดงอีกต่อไป`)) {
+          setIsDeleting(true);
+          google.script.run
+            .withSuccessHandler(() => {
+              fetchData();
+              setIsDeleting(false);
+              if (activeJobId === id) setView('JOB_LIST');
+            })
+            .withFailureHandler(err => { alert('เกิดข้อผิดพลาดในการลบ Job: ' + err.message); setIsDeleting(false); })
+            .deleteJob(id);
+        }
+      };
+      
+      const handleCreateTask = (formData) => {
+        setIsSaving(true);
+        google.script.run
+          .withSuccessHandler(newId => {
+            fetchData();
+            setShowTaskForm(false);
+            setIsSaving(false);
+          })
+          .withFailureHandler(err => {
+            alert('เกิดข้อผิดพลาดในการสร้าง Task: ' + err.message);
+            setIsSaving(false);
+          })
+          .addTask(activeJobId, formData);
+      };
+
+      const handleDeleteTask = (id, e) => {
+        e.stopPropagation();
+        if (window.confirm(`⚠️ คุณต้องการลบใบงานย่อย ${id} ใช่หรือไม่?`)) {
+          setIsDeleting(true);
+          google.script.run
+            .withSuccessHandler(() => {
+              fetchData();
+              setIsDeleting(false);
+              if (activeTaskId === id) setView('JOB_DETAIL');
+            })
+            .withFailureHandler(err => { alert('เกิดข้อผิดพลาดในการลบ Task: ' + err.message); setIsDeleting(false); })
+            .deleteTask(id);
+        }
+      };
+      
+      const handleCreateDefect = (formData) => {
+        setIsSaving(true);
+        google.script.run
+          .withSuccessHandler(newId => {
+            fetchData();
+            setShowDefectForm(false);
+            setIsSaving(false);
+          })
+          .withFailureHandler(err => {
+            alert('เกิดข้อผิดพลาดในการสร้าง Defect: ' + err.message);
+            setIsSaving(false);
+          })
+          .addDefect(activeTaskId, formData);
+      };
+
+      const handleDeleteDefect = (id, e) => {
+        e.stopPropagation();
+        if (window.confirm(`⚠️ คุณต้องการลบรายการ Defect ${id} ใช่หรือไม่?`)) {
+          setIsDeleting(true);
+          google.script.run
+            .withSuccessHandler(() => {
+              fetchData();
+              setIsDeleting(false);
+              if (activeDefectId === id) setView('TASK_DETAIL');
+            })
+            .withFailureHandler(err => { alert('เกิดข้อผิดพลาดในการลบ Defect: ' + err.message); setIsDeleting(false); })
+            .deleteDefect(id);
+        }
+      };
+
+      const handleExportTaskPlans = () => {
+        if (!activeJob?.tasks || activeJob.tasks.length === 0) {
+          alert('ไม่มีใบงานย่อยให้ Export ใน Job นี้');
+          return;
+        }
+        setIsExportingPDF(true);
+        google.script.run
+          .withSuccessHandler((res) => {
+            setIsExportingPDF(false);
+            setPdfLinks(JSON.parse(res)); 
+          })
+          .withFailureHandler((err) => {
+            setIsExportingPDF(false);
+            alert('เกิดข้อผิดพลาดในการ Export PDF: ' + err.message);
+          })
+          .exportTaskPlansToPDF(activeJobId);
+      };
+      
+      const handleUpdateTaskStatus = (id, status) => {
+        if (window.confirm(`⚠️ คุณต้องการเปลี่ยนสถานะใบงานย่อยเป็น "${status}" ใช่หรือไม่?`)) {
+          setIsSaving(true);
+          google.script.run
+            .withSuccessHandler(() => {
+              fetchData();
+              setIsSaving(false);
+            })
+            .withFailureHandler(err => { 
+              alert('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ: ' + err.message); 
+              setIsSaving(false); 
+            })
+            .updateTaskStatusAndJob(id, status);
+        }
+      };
+
+      const handleExportDefectReport = (taskId, e) => {
+        e.stopPropagation();
+        setIsExportingPDF(true); 
+        google.script.run
+          .withSuccessHandler((res) => {
+            setIsExportingPDF(false);
+            setPdfLinks([JSON.parse(res)]); 
+          })
+          .withFailureHandler((err) => {
+            setIsExportingPDF(false);
+            alert('เกิดข้อผิดพลาดในการ Export PDF: ' + err.message);
+          })
+          .exportDefectReportToPDF(taskId);
+      };
+
+      // --- Modals ---
+      const JobModal = () => {
+        const isEditMode = !!editingJob;
+        const formatDateForInput = (dateString) => {
+          if (!dateString) return '';
+          try {
+            const d = new Date(dateString);
+            if (isNaN(d.getTime())) return dateString;
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+          } catch(e) {
+            return dateString;
+          }
+        };
+
+        const [formData, setFormData] = useState({ 
+          id: editingJob ? editingJob.id : '',
+          site: editingJob ? editingJob.site : (uniqueSites[0] || ''), 
+          owner: editingJob ? editingJob.owner : '', 
+          ownerCompany: editingJob ? editingJob.ownerCompany : '', 
+          staff: editingJob ? editingJob.staff : STAFFS[2], 
+          replyDueDate: editingJob ? formatDateForInput(editingJob.replyDueDate) : '', 
+          remark: editingJob ? editingJob.remark : '' 
+        });
+        
+        useEffect(() => {
+          if (!isEditMode && uniqueSites.length > 0 && formData.site === uniqueSites[0] && formData.owner === '') {
+            const defaultOwners = ownerMaster.filter(m => m.site === uniqueSites[0]);
+            if (defaultOwners.length > 0) {
+              setFormData(prev => ({
+                ...prev,
+                owner: defaultOwners[0].owner,
+                ownerCompany: defaultOwners[0].ownerCompany
+              }));
+            }
+          }
+        }, [uniqueSites, ownerMaster, isEditMode]);
+        
+        const availableOwners = ownerMaster.filter(m => m.site === formData.site);
+        const uniqueOwnersList = [...new Set(availableOwners.map(m => m.owner))];
+        
+        const handleSiteChange = (e) => {
+          const newSite = e.target.value;
+          const filtered = ownerMaster.filter(m => m.site === newSite);
+          const defaultOwner = filtered.length > 0 ? filtered[0].owner : '';
+          const defaultCompany = filtered.length > 0 ? filtered[0].ownerCompany : '';
+          setFormData({
+            ...formData, 
+            site: newSite,
+            owner: defaultOwner,
+            ownerCompany: defaultCompany
+          });
+        };
+
+        const handleOwnerChange = (e) => {
+          const newOwner = e.target.value;
+          const matched = ownerMaster.find(m => m.site === formData.site && m.owner === newOwner);
+          setFormData({
+            ...formData, 
+            owner: newOwner,
+            ownerCompany: matched ? matched.ownerCompany : ''
+          });
+        };
+
+        const handleClose = () => {
+          setShowJobForm(false);
+          setEditingJob(null);
+        };
+        
+        const handleSubmit = () => {
+          if (isEditMode) {
+            if (window.confirm('คุณยืนยันที่จะบันทึกการแก้ไขข้อมูลนี้ใช่หรือไม่?')) {
+              handleUpdateJob(formData);
+            }
+          } else {
+            handleCreateJob(formData);
+          }
+        };
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-2xl">
+              <div className="flex justify-between items-center mb-6 border-b pb-3">
+                <h2 className="text-xl font-bold text-gray-800">{isEditMode ? `แก้ไขใบงานหลัก: ${formData.id}` : 'สร้างใบงานหลัก (JOB)'}</h2>
+                <button onClick={handleClose} className="text-gray-400 hover:text-red-500 transition-colors p-1"><IconX /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Site <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.site} onChange={handleSiteChange}>
+                    {uniqueSites.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ผู้ดูแล (Owner) <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.owner} onChange={handleOwnerChange}>
+                    {uniqueOwnersList.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ชื่อบริษัทผู้ดูแล</label>
+                  <input type="text" className="block w-full rounded-lg border-gray-200 bg-gray-50 shadow-sm text-gray-500 text-sm py-2 px-3 border cursor-not-allowed" value={formData.ownerCompany} readOnly placeholder="ดึงข้อมูลอัตโนมัติ" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ชื่อ Staff <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.staff} onChange={e => setFormData({...formData, staff: e.target.value})}>
+                    {STAFFS.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">กำหนดวันตอบกลับ Owner</label>
+                  <input type="date" className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.replyDueDate} onChange={e => setFormData({...formData, replyDueDate: e.target.value})} />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">หมายเหตุ</label>
+                  <textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" rows="2" value={formData.remark} onChange={e => setFormData({...formData, remark: e.target.value})} placeholder="ระบุหมายเหตุเพิ่มเติม (ถ้ามี)"></textarea>
+                </div>
+              </div>
+              <div className="mt-8 flex justify-end gap-3">
+                <button onClick={handleClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors">ยกเลิก</button>
+                <button onClick={handleSubmit} disabled={isSaving} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center shadow-md shadow-blue-200 transition-all disabled:opacity-70">
+                  {isSaving ? 'กำลังบันทึก...' : <><span className="mr-2"><IconSave/></span> {isEditMode ? 'บันทึกการแก้ไข' : 'บันทึกใบงาน'}</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      const TaskModal = () => {
+        const [formData, setFormData] = useState({ scope: 'SAS', building: '', unit: '', customerName: '', targetFixDate: '', remark: '' });
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-2xl">
+              <div className="flex justify-between items-center mb-6 border-b pb-3">
+                <h2 className="text-xl font-bold text-gray-800">สร้างใบงานย่อย (TASK)</h2>
+                <button onClick={() => setShowTaskForm(false)} className="text-gray-400 hover:text-red-500 transition-colors p-1"><IconX /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-5">
+                <div className="col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Scope งาน <span className="text-red-500">*</span></label>
+                  <div className="flex gap-6">
+                    <label className="inline-flex items-center cursor-pointer p-3 border rounded-lg hover:bg-gray-50 flex-1">
+                      <input type="radio" className="form-radio text-blue-600 w-5 h-5 focus:ring-blue-500" value="SAS" checked={formData.scope === 'SAS'} onChange={e => setFormData({...formData, scope: e.target.value})} />
+                      <span className="ml-3 font-medium text-gray-800">SAS (ในความรับผิดชอบ)</span>
+                    </label>
+                    <label className="inline-flex items-center cursor-pointer p-3 border rounded-lg hover:bg-gray-50 flex-1">
+                      <input type="radio" className="form-radio text-purple-600 w-5 h-5 focus:ring-purple-500" value="VO" checked={formData.scope === 'VO'} onChange={e => setFormData({...formData, scope: e.target.value})} />
+                      <span className="ml-3 font-medium text-gray-800">VO (นอกเหนือความรับผิดชอบ)</span>
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Building <span className="text-red-500">*</span></label>
+                  <input type="text" className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.building} onChange={e => setFormData({...formData, building: e.target.value})} placeholder="ex. Tower A" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Unit No. <span className="text-red-500">*</span></label>
+                  <input type="text" className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} placeholder="ex. A101" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ชื่อลูกค้า <span className="text-red-500">*</span></label>
+                  <input type="text" className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})} placeholder="ระบุชื่อลูกค้า" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">กำหนดวันเข้าแก้ไข <span className="text-red-500">*</span></label>
+                  <input type="date" className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.targetFixDate} onChange={e => setFormData({...formData, targetFixDate: e.target.value})} />
+                </div>
+              </div>
+              <div className="mt-8 flex justify-end gap-3">
+                <button onClick={() => setShowTaskForm(false)} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors">ยกเลิก</button>
+                <button onClick={() => handleCreateTask(formData)} disabled={isSaving} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center shadow-md shadow-blue-200 transition-all disabled:opacity-70">
+                   {isSaving ? 'กำลังบันทึก...' : <><span className="mr-2"><IconSave/></span> บันทึกใบงานย่อย</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      const DefectModal = () => {
+        const isVO = activeTask?.scope === 'VO';
+        const [formData, setFormData] = useState({ 
+          mainCategory: MAIN_CATEGORIES[0], 
+          subCategory: SUB_CATEGORIES[MAIN_CATEGORIES[0]][0], 
+          description: '', 
+          major: 'ไม่ใช่',
+          team: TEAMS[0], 
+          targetStartDate: '', 
+          targetEndDate: '', 
+          voSteps: '', 
+          remark: '',
+          imgBefore: ''
+        });
+        
+        const handleMainCatChange = (e) => {
+          const main = e.target.value;
+          setFormData({...formData, mainCategory: main, subCategory: SUB_CATEGORIES[main][0] || ''});
+        };
+
+        const handleSave = () => {
+          if (!formData.description || formData.description.trim() === '') {
+            alert('กรุณากรอก "รายละเอียด Defect" ก่อนทำการบันทึก');
+            return;
+          }
+          handleCreateDefect(formData);
+        };
+        
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-10 px-4">
+            <div className="bg-white rounded-2xl w-full max-w-3xl p-6 shadow-2xl my-auto">
+              <div className="flex justify-between items-center border-b pb-3 mb-6">
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <span className="bg-red-100 text-red-600 p-1 rounded-md"><IconPlus/></span>
+                  เพิ่มรายการ Defect
+                </h2>
+                <button onClick={() => setShowDefectForm(false)} className="text-gray-400 hover:text-red-500 transition-colors p-1"><IconX /></button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ลักษณะงานหลัก <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.mainCategory} onChange={handleMainCatChange}>
+                    {MAIN_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ลักษณะงานรอง <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.subCategory} onChange={e => setFormData({...formData, subCategory: e.target.value})}>
+                    {(SUB_CATEGORIES[formData.mainCategory] || []).map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">ทีมเข้าแก้ไข <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" value={formData.team} onChange={e => setFormData({...formData, team: e.target.value})}>
+                    {TEAMS.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Major (ปัญหาหลัก) <span className="text-red-500">*</span></label>
+                  <select className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm py-2 px-3 border" 
+                    value={formData.major} 
+                    onChange={e => setFormData({...formData, major: e.target.value})}>
+                    <option value="ไม่ใช่">ไม่ใช่</option>
+                    <option value="ใช่">ใช่ (ส่งผลกระทบสูง)</option>
+                  </select>
+                </div>
+
+                <div className="col-span-1 md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">รายละเอียด Defect <span className="text-red-500">*</span></label>
+                   <textarea className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border" rows="3" 
+                    value={formData.description} 
+                    onChange={e => setFormData({...formData, description: e.target.value})} 
+                    placeholder="ระบุรายละเอียดปัญหาที่พบอย่างชัดเจน..."></textarea>
+                </div>
+
+                {/* ส่วนอัปโหลดรูปภาพก่อนแก้ไข */}
+                <div className="col-span-1 md:col-span-2 bg-gray-50/50 p-5 rounded-xl border border-gray-200 mt-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">อัปโหลดรูปภาพก่อนแก้ไข <span className="text-gray-400 font-normal">(ไม่บังคับ - อัปโหลดภายหลังได้ในหน้ารายละเอียด)</span></label>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    {formData.imgBefore ? (
+                      <div className="relative group">
+                        <img src={formData.imgBefore} alt="Before" className="h-24 w-24 object-cover rounded-lg border shadow-sm bg-white" />
+                        <button onClick={() => setFormData({...formData, imgBefore: ''})} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 shadow-md text-xs transition-transform hover:scale-110">X</button>
+                      </div>
+                    ) : (
+                      <div className="h-24 w-24 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 rounded-lg bg-white text-xs">
+                         <span className="opacity-70">ไม่มีรูปภาพ</span>
+                      </div>
+                    )}
+                    <div className="flex-1 w-full">
+                       <input type="file" accept="image/*" onChange={(e) => {
+                         const file = e.target.files[0];
+                         if (file) {
+                           const reader = new FileReader();
+                           reader.onloadend = () => setFormData(prev => ({ ...prev, imgBefore: reader.result }));
+                           reader.readAsDataURL(file);
+                         }
+                       }} className="text-sm w-full file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+                    </div>
+                  </div>
+                </div>
+                
+                {isVO && (
+                  <div className="col-span-1 md:col-span-2 bg-purple-50 p-5 rounded-xl border border-purple-100 mt-2">
+                    <label className="block text-sm font-semibold text-purple-800 mb-1">ขั้นตอนการแก้ไข (เฉพาะงาน VO) <span className="text-red-500">*</span></label>
+                    <textarea className="block w-full rounded-lg border-purple-200 shadow-sm focus:border-purple-500 focus:ring-purple-500 text-sm py-2 px-3 border" rows="2" placeholder="ระบุขั้นตอนการทำงานเพื่อประเมิน BOQ..." value={formData.voSteps} onChange={e => setFormData({...formData, voSteps: e.target.value})}></textarea>
+                  </div>
+                )}
+              </div>
+              <div className="mt-8 flex justify-end gap-3 pt-4 border-t">
+                <button onClick={() => setShowDefectForm(false)} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors">ยกเลิก</button>
+                <button 
+                  onClick={handleSave} 
+                  disabled={isSaving || !formData.description.trim()} 
+                  className={`px-6 py-2.5 text-white rounded-lg flex items-center transition-all shadow-md font-medium ${isSaving || !formData.description.trim() ? 'bg-gray-400 cursor-not-allowed shadow-none' : 'bg-red-500 hover:bg-red-600 shadow-red-200 hover:-translate-y-0.5'}`}>
+                  {isSaving ? 'กำลังบันทึก...' : <><span className="mr-2"><IconSave/></span> บันทึก Defect</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // --- Render Views ---
+      if (isLoading) {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
+            <svg className="animate-spin h-10 w-10 text-blue-600 mb-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg>
+            <div className="text-gray-600 font-medium">กำลังโหลดข้อมูลระบบ...</div>
+          </div>
+        );
+      }
+
+      // --- เช็คว่ามีการ Login หรือไม่ ---
+      if (!currentUser) {
+        return (
+          <div className="min-h-screen bg-slate-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+            <div className="sm:mx-auto sm:w-full sm:max-w-md">
+              <div className="flex justify-center text-white mb-4"><IconClipboard /></div>
+              <h2 className="text-center text-3xl font-extrabold text-white">
+                {authMode === 'LOGIN' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิกใหม่'}
+              </h2>
+              <p className="mt-2 text-center text-sm text-gray-400">
+                SAS Defect Management
+              </p>
+            </div>
+
+            <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+              <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+                <form className="space-y-6" onSubmit={handleAuthSubmit}>
+                  {authError && (
+                    <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4 rounded-md">
+                      <p className="text-sm text-red-700 font-medium">{authError}</p>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">User ID <span className="text-red-500">*</span></label>
+                    <div className="mt-1 relative rounded-md shadow-sm">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <IconUser />
+                      </div>
+                      <input type="text" required value={authForm.userId} onChange={e => setAuthForm({...authForm, userId: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="รหัสพนักงาน หรือชื่อผู้ใช้" />
+                    </div>
+                  </div>
+
+                  {authMode === 'REGISTER' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">ตำแหน่ง (Position) <span className="text-red-500">*</span></label>
+                        <div className="mt-1 relative rounded-md shadow-sm">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                            <IconBriefcase />
+                          </div>
+                          <select required value={authForm.position} onChange={e => setAuthForm({...authForm, position: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white">
+                            <option value="" disabled>-- เลือกตำแหน่ง --</option>
+                            {POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Email</label>
+                          <div className="mt-1 relative rounded-md shadow-sm">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                              <IconMail />
+                            </div>
+                            <input type="email" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="example@mail.com" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Line ID</label>
+                          <div className="mt-1 relative rounded-md shadow-sm">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                              <IconMessage />
+                            </div>
+                            <input type="text" value={authForm.line} onChange={e => setAuthForm({...authForm, line: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Line ID" />
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">เบอร์โทร</label>
+                        <div className="mt-1 relative rounded-md shadow-sm">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                            <IconPhone />
+                          </div>
+                          <input type="tel" value={authForm.phone} onChange={e => setAuthForm({...authForm, phone: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="08X-XXX-XXXX" />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">รหัสผ่าน <span className="text-red-500">*</span></label>
+                    <div className="mt-1 relative rounded-md shadow-sm">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <IconLock />
+                      </div>
+                      <input type="password" required value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="รหัสผ่าน" />
+                    </div>
+                  </div>
+
+                  {authMode === 'REGISTER' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">ยืนยันรหัสผ่าน <span className="text-red-500">*</span></label>
+                      <div className="mt-1 relative rounded-md shadow-sm">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                          <IconLock />
+                        </div>
+                        <input type="password" required value={authForm.confirmPassword} onChange={e => setAuthForm({...authForm, confirmPassword: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="กรอกรหัสผ่านอีกครั้ง" />
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <button type="submit" disabled={authLoading} className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-colors">
+                      {authLoading ? 'กำลังดำเนินการ...' : (authMode === 'LOGIN' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก')}
+                    </button>
+                  </div>
+                </form>
+
+                <div className="mt-6">
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-300" /></div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="px-2 bg-white text-gray-500">
+                        {authMode === 'LOGIN' ? 'ยังไม่มีบัญชีผู้ใช้?' : 'มีบัญชีอยู่แล้ว?'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-6">
+                    <button onClick={() => {
+                        setAuthMode(authMode === 'LOGIN' ? 'REGISTER' : 'LOGIN');
+                        setAuthError('');
+                      }} 
+                      className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                      {authMode === 'LOGIN' ? 'ลงทะเบียนผู้ใช้ใหม่' : 'กลับไปหน้าเข้าสู่ระบบ'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // --- หน้าจอหลักหลังจาก Login ---
+      return (
+        <div className="min-h-screen pb-12">
+          <nav className="bg-slate-900 text-white shadow-md sticky top-0 z-40">
+            <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+              <div className="flex items-center cursor-pointer hover:text-blue-200 transition-colors" onClick={() => setView('JOB_LIST')}>
+                <IconClipboard />
+                 <span className="ml-3 font-bold text-xl tracking-wide">SAS Defect Management</span>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-medium text-gray-300 hidden sm:block">
+                  ผู้ใช้งาน: <span className="text-white">{currentUser.fullName}</span>
+                </span>
+                <button 
+                  onClick={() => setCurrentUser(null)} 
+                  className="bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded text-sm font-bold transition-colors border border-red-500/20 hover:border-red-500">
+                  ออกจากระบบ
+                </button>
+              </div>
+            </div>
+          </nav>
+
+          <main className="max-w-7xl mx-auto px-4 py-8">
+           {view === 'JOB_LIST' && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-5 rounded-xl shadow-sm border border-gray-100 gap-4">
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-800">หน้าหลัก (Jobs)</h1>
+                    <p className="text-sm text-gray-500 mt-1">รายการใบงานหลักทั้งหมดในระบบ</p>
+                  </div>
+                  <button onClick={() => { setEditingJob(null); setShowJobForm(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center font-medium shadow-md shadow-blue-200 transition-all hover:-translate-y-0.5">
+                    <span className="mr-2"><IconPlus /></span> สร้างใบงานหลัก
+                  </button>
+                </div>
+                
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50/80">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Job ID</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Site</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ผู้ดูแล (Owner)</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ผู้รับผิดชอบ</th>
+                        <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">สถานะ</th>
+                        <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Tasks</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">หมายเหตุ</th>
+                        <th className="px-6 py-4"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {jobs.map((job) => (
+                        <tr 
+                          key={job.id} 
+                          className="hover:bg-blue-50/50 cursor-pointer transition-colors group" 
+                          onClick={() => { setActiveJobId(job.id); setView('JOB_DETAIL'); }}
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="font-bold text-blue-600 group-hover:text-blue-800 transition-colors">{job.id}</div>
+                            {job.replyDueDate && (
+                              <div className="text-[11px] text-gray-400 mt-1 bg-gray-100 inline-block px-2 py-0.5 rounded">Due: {job.replyDueDate}</div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">{job.site}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-800">{job.owner || '-'}</div>
+                            {job.ownerCompany && (
+                              <div className="text-[11px] text-gray-500 mt-1 truncate max-w-[120px]">{job.ownerCompany}</div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{job.staff || '-'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <StatusBadge status={job.status} />
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                            <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-bold text-xs border">
+                              {job.tasks ? job.tasks.length : 0}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500 max-w-[150px] truncate" title={job.remark}>
+                            {job.remark || '-'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setEditingJob(job); setShowJobForm(true); }} 
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors" title="ตั้งค่า/แก้ไข">
+                              <IconSettings />
+                            </button>
+                            <button 
+                              onClick={(e) => handleDeleteJob(job.id, e)} 
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-full transition-colors" title="ลบใบงานหลัก">
+                               <IconTrash />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {jobs.length === 0 && <tr><td colSpan="8" className="px-6 py-12 text-center text-gray-400 bg-gray-50/50">ยังไม่มีข้อมูลใบงานหลักในระบบ</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {view === 'JOB_DETAIL' && (
+              <div className="space-y-6">
+                <div className="flex items-center text-sm text-gray-500 bg-white p-3.5 rounded-xl shadow-sm border border-gray-100">
+                  <button onClick={() => setView('JOB_LIST')} className="hover:text-blue-600 flex items-center transition-colors"><span className="mr-1.5"><IconHome/></span> หน้าหลัก</button>
+                  <span className="mx-2 text-gray-300"><IconChevronRight /></span>
+                  <span className="font-bold text-gray-800 bg-gray-100 px-2.5 py-1 rounded-md">{activeJob?.id}</span>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 border-t-4 border-t-blue-500 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-1">Job: {activeJob?.id}</h2>
+                    <div className="flex items-center text-sm text-gray-500 gap-3">
+                      <span className="flex items-center"><svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg> {activeJob?.site}</span>
+                      <span className="text-gray-300">|</span>
+                      <span>Owner: <span className="font-medium text-gray-700">{activeJob?.ownerCompany}</span></span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-3 mt-3 md:mt-0">
+                    <button 
+                      onClick={handleExportTaskPlans} 
+                      disabled={isExportingPDF} 
+                      className="bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 px-5 py-2.5 rounded-lg flex items-center font-medium shadow-sm transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                      {isExportingPDF ? 'กำลังสร้างเอกสาร...' : <><span className="mr-2">📄</span> Export แผนเข้าแก้ไข</>}
+                    </button>
+                    <button 
+                      onClick={() => setShowTaskForm(true)} 
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center font-medium shadow-md shadow-blue-200 transition-all hover:-translate-y-0.5">
+                      <span className="mr-2"><IconPlus /></span> สร้างใบงานย่อย (Task)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-6">
+                 {activeJob?.tasks?.map(task => (
+                  <div key={task.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow relative overflow-hidden group">
+                    <div className={`absolute top-0 left-0 w-1.5 h-full ${task.scope === 'SAS' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
+                    
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <span className="font-bold text-lg text-gray-800 block">{task.id}</span>
+                        {/* เลื่อน StatusBadge มาไว้ข้าง Scope */}
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded ${task.scope === 'SAS' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                            {task.scope}
+                          </span>
+                          <StatusBadge status={task.status} />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {/* ปุ่ม Export แสดงเฉพาะเมื่อสถานะเป็น Closed */}
+                        {task.status === 'Closed' && (
+                          <button 
+                            onClick={(e) => handleExportDefectReport(task.id, e)} 
+                            className="text-gray-400 hover:text-emerald-600 p-1.5 rounded-md hover:bg-emerald-50 transition-colors" 
+                            title="Export เอกสารแก้ไข Defect"
+                            disabled={isExportingPDF}
+                          >
+                            <IconDownload />
+                          </button>
+                        )}
+                        {/* ปุ่มลบ */}
+                        <button 
+                          onClick={(e) => handleDeleteTask(task.id, e)} 
+                          className="text-gray-300 hover:text-red-500 p-1.5 rounded-md hover:bg-red-50 transition-colors" 
+                          title="ลบใบงานย่อย"
+                        >
+                          <IconTrash />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 mb-5">
+                      {/* เพิ่มชื่อลูกค้าไว้ข้างบนยูนิต */}
+                      <div className="flex items-start text-sm text-gray-700 px-1">
+                        <svg className="w-4 h-4 mr-2 text-gray-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                        <span className="font-medium truncate" title={task.customerName || 'ไม่ระบุชื่อลูกค้า'}>
+                          {task.customerName || '- ไม่ระบุชื่อลูกค้า -'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center text-sm text-gray-600 bg-gray-50 rounded-lg p-2.5 border border-gray-100">
+                        <span className="font-semibold w-12 text-gray-500">ยูนิต:</span> 
+                        <span className="font-bold text-gray-800">{task.building} - {task.unit}</span>
+                      </div>
+                      
+                      <div className="flex justify-between items-center px-1 pt-1">
+                        <div className="text-sm">
+                          <span className="text-gray-500 mr-1">Defects:</span>
+                          <span className="font-bold text-gray-800">{task.defects?.length || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button onClick={() => { setActiveTaskId(task.id); setView('TASK_DETAIL'); }} className="w-full py-2.5 bg-gray-50 hover:bg-gray-100 hover:text-blue-700 border border-gray-200 rounded-lg text-sm font-bold text-gray-700 transition-colors flex justify-center items-center">
+                      จัดการรายการ Defect <span className="ml-1 opacity-50"><IconChevronRight/></span>
+                    </button>
+                  </div>
+                ))}
+                  {(!activeJob?.tasks || activeJob?.tasks.length === 0) && (
+                    <div className="col-span-full py-12 text-center text-gray-400 bg-white rounded-xl border border-dashed border-gray-300">
+                      ยังไม่มีใบงานย่อยใน Job นี้
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {view === 'TASK_DETAIL' && (
+              <div className="space-y-6">
+                <div className="flex items-center text-sm text-gray-500 bg-white p-3.5 rounded-xl shadow-sm border border-gray-100 flex-wrap gap-y-2">
+                  <button onClick={() => setView('JOB_LIST')} className="hover:text-blue-600 flex items-center transition-colors"><span className="mr-1.5"><IconHome/></span></button>
+                  <span className="mx-1 text-gray-300"><IconChevronRight /></span>
+                  <button onClick={() => setView('JOB_DETAIL')} className="hover:text-blue-600 font-medium transition-colors px-2 py-1 hover:bg-gray-50 rounded">{activeJob?.id}</button>
+                  <span className="mx-1 text-gray-300"><IconChevronRight /></span>
+                  <span className="font-bold text-gray-800 bg-gray-100 px-2.5 py-1 rounded-md">{activeTask?.id}</span>
+                </div>
+                
+                <div className={`bg-white p-6 rounded-xl shadow-sm border border-gray-100 border-t-4 ${activeTask?.scope === 'SAS' ? 'border-t-blue-500' : 'border-t-purple-500'} flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5`}>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-3">
+                      <h2 className="text-2xl font-bold text-gray-800">Task: {activeTask?.id}</h2>
+                      <StatusBadge status={activeTask?.status} />
+                    </div>
+                    <div className="flex flex-wrap items-center text-sm text-gray-600 gap-x-5 gap-y-3">
+                      <span className="bg-gray-50 px-3 py-1.5 rounded-md border flex items-center shadow-sm">
+                        <span className="text-gray-500 mr-2">ยูนิต:</span> 
+                        <strong className="text-gray-800 text-base">{activeTask?.building} - {activeTask?.unit}</strong>
+                      </span>
+                      
+                      {/* เพิ่มไอคอนและจัดการพื้นที่ชื่อลูกค้า */}
+                      <span className="flex items-center text-gray-700 bg-white px-2 py-1 rounded">
+                        <svg className="w-4 h-4 mr-1.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                        ลูกค้า: <strong className="text-gray-800 ml-2">{activeTask?.customerName || 'ไม่ระบุชื่อ'}</strong>
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full lg:w-auto p-4 lg:p-0 bg-gray-50 lg:bg-transparent rounded-lg border lg:border-0 border-gray-200">
+                    {/* --- กลุ่มจัดการสถานะใบงาน --- */}
+                    <div className="flex gap-2 w-full sm:w-auto border-b sm:border-b-0 sm:border-r border-gray-200 pb-3 sm:pb-0 sm:pr-4">
+                      {(activeTask?.status === 'รอดำเนินการ' || !activeTask?.status) && (
+                        <>
+                          <button onClick={() => handleUpdateTaskStatus(activeTask.id, 'Active')} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex justify-center items-center text-sm font-medium shadow-sm transition-colors">
+                            เปิดใบงาน
+                          </button>
+                          {activeTask?.scope === 'VO' && (
+                            <button onClick={() => handleUpdateTaskStatus(activeTask.id, 'Reject')} className="flex-1 sm:flex-none bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex justify-center items-center text-sm font-medium shadow-sm transition-colors">
+                              Reject
+                            </button>
+                          )}
+                        </>
+                      )}
+
+                      {/* ปุ่มปิดใบงาน (Closed) */}
+                      {activeTask?.status === 'Active' && (
+                        <button 
+                          onClick={() => handleUpdateTaskStatus(activeTask.id, 'Closed')} 
+                          disabled={!(activeTask?.defects?.length > 0 && activeTask.defects.every(d => d.status === 'แก้ไขแล้ว'))}
+                          className={`flex-1 sm:flex-none px-4 py-2 rounded-lg flex justify-center items-center text-sm font-bold shadow-sm text-white transition-all ${(activeTask?.defects?.length > 0 && activeTask.defects.every(d => d.status === 'แก้ไขแล้ว')) ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 hover:-translate-y-0.5' : 'bg-gray-300 cursor-not-allowed shadow-none'}`}
+                          title={!(activeTask?.defects?.length > 0 && activeTask.defects.every(d => d.status === 'แก้ไขแล้ว')) ? 'ต้องเพิ่ม Defect อย่างน้อย 1 รายการ และแก้ไขให้เสร็จสิ้นทั้งหมดก่อนปิดใบงาน' : 'กดเพื่อปิดใบงาน (Closed)'}
+                        >
+                          ปิดใบงาน (Closed)
+                        </button>
+                      )}
+                      
+                      {activeTask?.status === 'Closed' && (
+                        <div className="flex items-center text-emerald-600 font-bold px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-200">
+                          <IconCheckCircle /> <span className="ml-1">ใบงานนี้ถูกปิดแล้ว</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* --- กลุ่มเพิ่มข้อมูล --- */}
+                    <button 
+                      onClick={() => setShowDefectForm(true)} 
+                      disabled={activeTask?.status === 'Reject' || activeTask?.status === 'Closed'}
+                      className={`w-full sm:w-auto px-4 py-2 rounded-lg flex justify-center items-center text-sm font-medium shadow-sm transition-all ${(activeTask?.status === 'Reject' || activeTask?.status === 'Closed') ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600 text-white shadow-red-200 hover:-translate-y-0.5'}`}>
+                      <span className="mr-1"><IconPlus /></span> เพิ่ม Defect
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 mt-6 overflow-hidden overflow-x-auto">
+                  <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                    <h3 className="font-bold text-gray-700">รายการ Defect ({activeTask?.defects?.length || 0})</h3>
+                  </div>
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-white">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Defect ID</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">หมวดหมู่</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">รายละเอียด</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">สถานะ</th>
+                        <th className="px-6 py-3"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {activeTask?.defects?.map((defect) => (
+                        <tr key={defect.id} className="hover:bg-blue-50/50 cursor-pointer transition-colors group" onClick={() => { setActiveDefectId(defect.id); setView('DEFECT_DETAIL'); }}>
+                          <td className="px-6 py-4 text-sm font-bold text-blue-600 group-hover:text-blue-800">{defect.id}</td>
+                          <td className="px-6 py-4 text-sm">
+                            <div className="font-bold text-gray-800">{defect.mainCategory}</div>
+                            <div className="text-[11px] text-gray-500 mt-0.5 bg-gray-100 inline-block px-1.5 py-0.5 rounded">{defect.subCategory}</div>
+                          </td>
+                          <td className="px-6 py-4 text-sm max-w-[200px] truncate text-gray-600" title={defect.description}>{defect.description}</td>
+                          <td className="px-6 py-4 text-sm flex items-center gap-2">
+                             <StatusBadge status={defect.status} />
+                             {defect.major === 'ใช่' && <span className="px-2 py-1 bg-red-50 text-red-600 border border-red-200 rounded-md text-[11px] font-bold shadow-sm">Major</span>}
+                          </td>
+                          <td className="px-6 py-4 text-right opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                              onClick={(e) => handleDeleteDefect(defect.id, e)} 
+                              disabled={activeTask?.status === 'Reject' || activeTask?.status === 'Closed'}
+                              className={`p-2 rounded-full transition-colors ${(activeTask?.status === 'Reject' || activeTask?.status === 'Closed') ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`} 
+                              title="ลบรายการ Defect">
+                              <IconTrash />
+                            </button>   
+                          </td>
+                        </tr>
+                      ))}
+                      {(!activeTask?.defects || activeTask?.defects.length === 0) && (
+                        <tr><td colSpan="5" className="px-6 py-12 text-center text-gray-400 bg-gray-50/50">ยังไม่มีรายการ Defect ในใบงานนี้</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {view === 'DEFECT_DETAIL' && (
+              <div className="space-y-6">
+                <div className="flex items-center text-sm text-gray-500 bg-white p-3.5 rounded-xl shadow-sm border border-gray-100 flex-wrap gap-y-2">
+                  <button onClick={() => setView('JOB_LIST')} className="hover:text-blue-600 flex items-center transition-colors"><span className="mr-1.5"><IconHome/></span></button>
+                  <span className="mx-1 text-gray-300"><IconChevronRight /></span>
+                  <button onClick={() => setView('JOB_DETAIL')} className="hover:text-blue-600 font-medium transition-colors px-2 py-1 hover:bg-gray-50 rounded">{activeJob?.id}</button>
+                  <span className="mx-1 text-gray-300"><IconChevronRight /></span>
+                  <button onClick={() => setView('TASK_DETAIL')} className="hover:text-blue-600 font-medium transition-colors px-2 py-1 hover:bg-gray-50 rounded">{activeTask?.id}</button>
+                  <span className="mx-1 text-gray-300"><IconChevronRight /></span>
+                  <span className="font-bold text-gray-800 bg-gray-100 px-2.5 py-1 rounded-md">{activeDefect?.id}</span>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 border-l-4 border-l-red-500">
+                  <div className="flex justify-between items-start mb-5 pb-4 border-b">
+                    <h2 className="text-2xl font-bold text-gray-800">ข้อมูล Defect: {activeDefect?.id}</h2>
+                    <StatusBadge status={activeDefect?.status} />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                    <div className="flex border-b border-gray-50 pb-2">
+                      <span className="w-28 text-gray-500">ลักษณะงาน:</span> 
+                      <span className="font-semibold text-gray-800">{activeDefect?.mainCategory} <span className="text-gray-300 mx-1">/</span> {activeDefect?.subCategory}</span>
+                    </div>
+                    <div className="flex border-b border-gray-50 pb-2">
+                      <span className="w-28 text-gray-500">ทีมเข้าแก้ไข:</span> 
+                      <span className="font-semibold text-gray-800">{activeDefect?.team}</span>
+                    </div>
+                    <div className="flex border-b border-gray-50 pb-2">
+                      <span className="w-28 text-gray-500">Major:</span> 
+                      <span className={activeDefect?.major === 'ใช่' ? "text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded" : "font-semibold"}>{activeDefect?.major || 'ไม่ใช่'}</span>
+                    </div>
+                    <div className="col-span-1 md:col-span-2 mt-2">
+                      <span className="block text-gray-500 mb-1">รายละเอียดปัญหา:</span>
+                      <p className="bg-gray-50/80 p-4 rounded-lg border border-gray-100 text-gray-800 whitespace-pre-line">{activeDefect?.description}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* อัปโหลดภาพ ส่ง status ไปเช็คสิทธิ์ (รวมถึง closed ด้วย) */}
+                <DefectImagesUploader defect={activeDefect} taskStatus={activeTask?.status} onSuccess={fetchData} />
+              </div>
+            )}
+              {/* --- ส่วน Modal แสดงผลลัพธ์ Export PDF --- */}
+              {pdfLinks.length > 0 && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+                    <div className="flex justify-between items-center mb-4 border-b pb-3">
+                      <h2 className="text-xl font-bold text-emerald-600 flex items-center gap-2">
+                        <IconCheckCircle /> สร้างไฟล์ PDF สำเร็จ
+                      </h2>
+                      <button onClick={() => setPdfLinks([])} className="text-gray-400 hover:text-red-500"><IconX /></button>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">ระบบได้แยกไฟล์ตามรายการใบงานย่อยไว้เรียบร้อยแล้ว กดปุ่มด้านล่างเพื่อเปิดหรือดาวน์โหลดเอกสาร</p>
+                    
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                      {pdfLinks.map(link => (
+                        <a key={link.taskId} href={link.url} target="_blank" rel="noreferrer" className="flex justify-between items-center p-3 border border-gray-200 rounded-lg hover:bg-blue-50 text-blue-600 hover:text-blue-700 hover:border-blue-200 transition-colors font-bold group">
+                          <span className="flex items-center"><span className="mr-2 text-xl">📄</span> {link.taskId}</span>
+                          <span className="text-gray-400 group-hover:text-blue-600"><IconChevronRight /></span>
+                        </a>
+                      ))}
+                    </div>
+                    
+                    <div className="mt-6 flex justify-end">
+                      <button onClick={() => setPdfLinks([])} className="px-6 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg font-bold transition-colors shadow-sm">ปิดหน้าต่าง</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+          </main>
+
+          {isDeleting && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100]">
+              <div className="bg-white px-8 py-5 rounded-xl shadow-2xl font-bold text-red-600 flex items-center gap-4 border border-red-100">
+                <svg className="animate-spin h-6 w-6 text-red-600" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg>
+                กำลังลบข้อมูลออกจากระบบ...
+              </div>
+            </div>
+          )}
+
+          {showJobForm && <JobModal />}
+          {showTaskForm && <TaskModal />}
+          {showDefectForm && <DefectModal />}
+        </div>
+      );
     }
-  }
-  
-  throw new Error('User ID หรือ รหัสผ่าน ไม่ถูกต้อง');
-}
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
