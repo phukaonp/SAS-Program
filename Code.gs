@@ -18,8 +18,8 @@ function initSheets() {
       'SubCategory', 'Description', 'Major', 'Team', 'ImgUnit', 'ImgBefore', 'ImgDuring', 'ImgAfter', 'Timestamp', 
       'VOSteps', 'ActualStartDate', 'ActualEndDate', 'Remark' 
     ],
-    // เพิ่ม Sheet User
-    'User': ['UserID', 'Password', 'FullName', 'Timestamp'] 
+    // เพิ่ม Sheet User และตั้ง Timestamp ให้อยู่ที่ Col N (ตำแหน่งที่ 14)
+    'User': ['UserID', 'Password', '', '', 'Position', '', '', '', '', 'Email', 'Line', 'Phone', '','','Timestamp'] 
   };
 
   Object.keys(sheetsInfo).forEach(name => {
@@ -45,7 +45,9 @@ function getAllData() {
     return data.map(row => {
       let obj = {};
       headers.forEach((header, index) => {
-        obj[header] = row[index];
+        if (header) { // กันกรณีหัวตารางว่าง
+          obj[header] = row[index];
+        }
       });
       // เพิ่มตัวแปร _raw ไว้เก็บข้อมูลแถวดิบๆ สำหรับอ้างอิงด้วย Column (0=A, 1=B, ..., 6=G)
       obj['_raw'] = row; 
@@ -958,20 +960,27 @@ function registerUser(formData) {
   }
   
   const data = sheet.getDataRange().getValues();
+  const inputUserId = String(formData.userId).trim();
+
   // เช็คว่า User ID ซ้ำหรือไม่
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === formData.userId) {
+    if (String(data[i][0]).trim() === inputUserId) {
       throw new Error('User ID นี้มีผู้ใช้งานแล้ว กรุณาใช้ชื่ออื่น');
     }
   }
 
-  // บันทึกข้อมูลลง Sheet (Col A = UserID, Col B = Password, Col C = FullName, Col D = Timestamp)
-  sheet.appendRow([
-    formData.userId,
-    formData.password,
-    formData.fullName,
-    new Date()
-  ]);
+  // บันทึกข้อมูลลง Sheet (Col A = UserID, Col B = Password, Col E = Position, Col J = Email, Col K = Line, Col L = Phone, Col N = Timestamp)
+  // สร้าง Array เปล่าๆ ความยาว 14 เพื่อให้ Timestamp ไปตกที่คอลัมน์ที่ 14 (Col N)
+  const newRow = new Array(15).fill('');
+  newRow[0] = formData.userId;
+  newRow[1] = "'" + formData.password; // เติม ' นำหน้า Password บังคับให้เป็น Text
+  newRow[4] = formData.position;       // Col E: Position
+  newRow[9] = formData.email;          // Col J: Email
+  newRow[10] = formData.line;          // Col K: Line
+  newRow[11] = formData.phone;         // Col L: Phone
+  newRow[14] = new Date();             // Index ที่ 13 คือ Col N
+
+  sheet.appendRow(newRow);
   
   return 'Success';
 }
@@ -982,12 +991,25 @@ function loginUser(userId, password) {
   if (!sheet) throw new Error('ไม่พบฐานข้อมูลผู้ใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
 
   const data = sheet.getDataRange().getValues();
+  
+  // แปลงค่าที่ส่งมาเป็น String และตัดช่องว่างซ้ายขวา
+  const inputUserId = String(userId).trim();
+  const inputPassword = String(password).trim();
+
   for (let i = 1; i < data.length; i++) {
+    const sheetUserId = String(data[i][0]).trim();
+    let sheetPassword = String(data[i][1]).trim();
+    
+    // ลบเครื่องหมาย ' ออก หากมีติดมาจากการบันทึกแบบบังคับเป็นข้อความ
+    if (sheetPassword.startsWith("'")) {
+        sheetPassword = sheetPassword.substring(1);
+    }
+
     // เช็ค User ID และ Password
-    if (data[i][0] === userId && data[i][1] === password) {
+    if (sheetUserId === inputUserId && sheetPassword === inputPassword) {
       return { 
         userId: data[i][0], 
-        fullName: data[i][2] 
+        fullName: data[i][0] // เอาชื่อ-นามสกุลออก จึงส่ง UserID ไปแสดงผลแทน
       };
     }
   }
