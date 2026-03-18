@@ -12,6 +12,51 @@
   <div id="root"></div>
 
   <script type="text/babel">
+    // --- Mock Google Apps Script API สำหรับการทดสอบนอกระบบ (Local/Canvas) ---
+    // ช่วยป้องกัน Error: google is not defined เวลาเปิดทดสอบแบบ Local
+    if (typeof google === 'undefined') {
+      console.warn("Google Apps Script API not found. Running in Mock Mode for UI testing.");
+      window.google = {
+        script: {
+          run: new Proxy({}, {
+            get: function(_, prop) {
+              const handler = {
+                success: null,
+                failure: null,
+                withSuccessHandler: function(cb) { this.success = cb; return new Proxy(this, proxyHandler); },
+                withFailureHandler: function(cb) { this.failure = cb; return new Proxy(this, proxyHandler); }
+              };
+              const proxyHandler = {
+                get: function(t, p) {
+                  if (p in t) return typeof t[p] === 'function' ? t[p].bind(t) : t[p];
+                  return function(...args) {
+                    console.log(`[Mock API] Called: ${p}`, args);
+                    setTimeout(() => {
+                      if (t.success) {
+                        if (p === 'getAllData') t.success(JSON.stringify([
+                           { id: 'JOB-MOCK-001', site: 'Mock Site', owner: 'Mock Owner', ownerCompany: 'Mock Company', staff: 'Mock Staff', status: 'Active', remark: 'นี่คือข้อมูลจำลอง', tasks: [
+                             { id: 'TSK-MOCK-001', scope: 'SAS', building: 'Tower A', unit: 'A101', status: 'Active', customerName: 'Mock Customer', targetFixDate: '2025-12-31', defects: [
+                               { id: 'DEF-MOCK-001', mainCategory: 'งานสถาปัตย์', subCategory: 'สีลอกร่อน', description: 'นี่คือข้อมูลจำลองสำหรับทดสอบ UI', major: 'ไม่ใช่', team: 'ทีมช่างสี', status: 'ยังไม่แก้ไข' }
+                             ]}
+                           ]}
+                        ]));
+                        else if (p === 'getMasterData') t.success(JSON.stringify({sites: ['Mock Site'], owners: [{site: 'Mock Site', owner: 'Mock Owner', ownerCompany: 'Mock Company'}]}));
+                        else if (p === 'loginUser') t.success({userId: args[0], fullName: 'ผู้ใช้งานจำลอง (Mock)'});
+                        else if (p === 'exportTaskPlansToPDF' || p === 'exportDefectReportToPDF') t.success(JSON.stringify([{taskId: 'MOCK-DOC', url: '#'}]));
+                        else t.success("Mock-Success");
+                      }
+                    }, 400);
+                  };
+                }
+              };
+              if (prop === 'withSuccessHandler' || prop === 'withFailureHandler') return handler[prop].bind(handler);
+              return proxyHandler.get(handler, prop);
+            }
+          })
+        }
+      };
+    }
+
     const { useState, useEffect, useRef } = React;
 
     // --- Mock Data Options ---
@@ -36,6 +81,14 @@
     const IconTrash = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
     const IconCheckCircle = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>;
     const IconDownload = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
+
+    // --- Icons สำหรับ Form สมัครสมาชิก ---
+    const IconUser = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>;
+    const IconLock = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>;
+    const IconBriefcase = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>;
+    const IconMail = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>;
+    const IconMessage = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>;
+    const IconPhone = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>;
 
     // --- UI Components ---
     const StatusBadge = ({ status }) => {
@@ -273,7 +326,7 @@
                 </div>
               ) : (
                 <div className={`h-32 flex flex-col items-center justify-center w-full rounded-lg text-xs text-center p-4 border-2 border-dashed ${isDisabled ? 'text-gray-400 border-gray-200' : 'text-gray-400 border-gray-300 bg-gray-50'}`}>
-                  <svg className="w-8 h-8 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L28 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                  <svg className="w-8 h-8 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L28 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2 2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                   {isDisabled ? disabledReason : 'ยังไม่มีรูปภาพ'}
                 </div>
               )}
@@ -366,9 +419,11 @@
       // --- เพิ่ม State สำหรับ Auth ---
       const [currentUser, setCurrentUser] = useState(null);
       const [authMode, setAuthMode] = useState('LOGIN'); // 'LOGIN' หรือ 'REGISTER'
-      const [authForm, setAuthForm] = useState({ userId: '', password: '', confirmPassword: '', fullName: '' });
+      const [authForm, setAuthForm] = useState({ userId: '', password: '', confirmPassword: '', position: '', email: '', line: '', phone: '' });
       const [authLoading, setAuthLoading] = useState(false);
       const [authError, setAuthError] = useState('');
+
+      const POSITIONS = ['SAS Staff', 'Supplier'];
 
       const [view, setView] = useState('JOB_LIST');
       const [jobs, setJobs] = useState([]);
@@ -400,7 +455,7 @@
         setAuthLoading(true);
 
         if (authMode === 'REGISTER') {
-          if (!authForm.userId || !authForm.password || !authForm.fullName) {
+          if (!authForm.userId || !authForm.password || !authForm.position) {
             setAuthError('กรุณากรอกข้อมูลที่มีเครื่องหมาย * ให้ครบถ้วน');
             setAuthLoading(false);
             return;
@@ -415,7 +470,7 @@
             .withSuccessHandler(() => {
               alert('สมัครสมาชิกสำเร็จ กรุณาเข้าสู่ระบบ');
               setAuthMode('LOGIN');
-              setAuthForm({ userId: '', password: '', confirmPassword: '', fullName: '' });
+              setAuthForm({ userId: '', password: '', confirmPassword: '', position: '', email: '', line: '', phone: '' });
               setAuthLoading(false);
             })
             .withFailureHandler(err => {
@@ -972,32 +1027,78 @@
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700">User ID <span className="text-red-500">*</span></label>
-                    <div className="mt-1">
-                      <input type="text" required value={authForm.userId} onChange={e => setAuthForm({...authForm, userId: e.target.value})} className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                    <div className="mt-1 relative rounded-md shadow-sm">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <IconUser />
+                      </div>
+                      <input type="text" required value={authForm.userId} onChange={e => setAuthForm({...authForm, userId: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="รหัสพนักงาน หรือชื่อผู้ใช้" />
                     </div>
                   </div>
 
                   {authMode === 'REGISTER' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
-                      <div className="mt-1">
-                        <input type="text" required value={authForm.fullName} onChange={e => setAuthForm({...authForm, fullName: e.target.value})} className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">ตำแหน่ง (Position) <span className="text-red-500">*</span></label>
+                        <div className="mt-1 relative rounded-md shadow-sm">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                            <IconBriefcase />
+                          </div>
+                          <select required value={authForm.position} onChange={e => setAuthForm({...authForm, position: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white">
+                            <option value="" disabled>-- เลือกตำแหน่ง --</option>
+                            {POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                        </div>
                       </div>
-                    </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Email</label>
+                          <div className="mt-1 relative rounded-md shadow-sm">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                              <IconMail />
+                            </div>
+                            <input type="email" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="example@mail.com" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Line ID</label>
+                          <div className="mt-1 relative rounded-md shadow-sm">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                              <IconMessage />
+                            </div>
+                            <input type="text" value={authForm.line} onChange={e => setAuthForm({...authForm, line: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Line ID" />
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">เบอร์โทร</label>
+                        <div className="mt-1 relative rounded-md shadow-sm">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                            <IconPhone />
+                          </div>
+                          <input type="tel" value={authForm.phone} onChange={e => setAuthForm({...authForm, phone: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="08X-XXX-XXXX" />
+                        </div>
+                      </div>
+                    </>
                   )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700">รหัสผ่าน <span className="text-red-500">*</span></label>
-                    <div className="mt-1">
-                      <input type="password" required value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                    <div className="mt-1 relative rounded-md shadow-sm">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <IconLock />
+                      </div>
+                      <input type="password" required value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="รหัสผ่าน" />
                     </div>
                   </div>
 
                   {authMode === 'REGISTER' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700">ยืนยันรหัสผ่าน <span className="text-red-500">*</span></label>
-                      <div className="mt-1">
-                        <input type="password" required value={authForm.confirmPassword} onChange={e => setAuthForm({...authForm, confirmPassword: e.target.value})} className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                      <div className="mt-1 relative rounded-md shadow-sm">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                          <IconLock />
+                        </div>
+                        <input type="password" required value={authForm.confirmPassword} onChange={e => setAuthForm({...authForm, confirmPassword: e.target.value})} className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="กรอกรหัสผ่านอีกครั้ง" />
                       </div>
                     </div>
                   )}
