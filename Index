@@ -1277,7 +1277,7 @@
                     
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <span className="font-bold text-lg text-gray-800 block">{task.id}</span>
+                        <span className="font-bold text-lg text-gray-800 block">{task.id.split('-').pop()}</span>
                         {/* เลื่อน StatusBadge มาไว้ข้าง Scope */}
                         <div className="flex items-center gap-2 mt-1.5">
                           <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded ${task.scope === 'SAS' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
@@ -1437,7 +1437,7 @@
                     <tbody className="bg-white divide-y divide-gray-100">
                       {activeTask?.defects?.map((defect) => (
                         <tr key={defect.id} className="hover:bg-blue-50/50 cursor-pointer transition-colors group" onClick={() => { setActiveDefectId(defect.id); setView('DEFECT_DETAIL'); }}>
-                          <td className="px-6 py-4 text-sm font-bold text-blue-600 group-hover:text-blue-800">{defect.id}</td>
+                          <td className="px-6 py-4 text-sm font-bold text-blue-600 group-hover:text-blue-800">{defect.id.split('-').pop()}</td>
                           <td className="px-6 py-4 text-sm">
                             <div className="font-bold text-gray-800">{defect.mainCategory}</div>
                             <div className="text-[11px] text-gray-500 mt-0.5 bg-gray-100 inline-block px-1.5 py-0.5 rounded">{defect.subCategory}</div>
