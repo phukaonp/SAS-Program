@@ -112,7 +112,28 @@ function getAllData() {
 function addJob(formData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('JOB');
-  const newId = 'JOB-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
+  const data = sheet.getDataRange().getValues();
+  
+  const siteStr = formData.site || 'UNKNOWN';
+  let maxNum = 0;
+  
+  // หารหัสล่าสุดของ Site นี้เพื่อรันเลข 000Y
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] === siteStr) { // คอลัมน์ B คือ Site
+      const id = data[i][0];
+      const parts = id.split('-');
+      if (parts.length >= 3) {
+        const num = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+  }
+  
+  // สร้าง JobID รูปแบบ: JOB-{Site}-000Y
+  const newNumStr = String(maxNum + 1).padStart(4, '0');
+  const newId = `JOB-${siteStr}-${newNumStr}`;
   
   sheet.appendRow([
     newId,                        // Col A
@@ -131,8 +152,28 @@ function addJob(formData) {
 function addTask(jobId, formData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('TASK');
+  const data = sheet.getDataRange().getValues();
   
-  const newId = 'TSK-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
+  let maxNum = 0;
+  
+  // หารหัส Task ล่าสุดของ JobID นี้เพื่อรันเลข 00Z
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] === jobId) { // คอลัมน์ B คือ JobID
+      const id = data[i][0];
+      const parts = id.split('-T');
+      if (parts.length >= 2) {
+        const num = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+  }
+
+  // สร้าง TaskID รูปแบบ: {JobID}-T00Z
+  const newNumStr = String(maxNum + 1).padStart(3, '0');
+  const newId = `${jobId}-T${newNumStr}`;
+
   const historyLog = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy, HH:mm:ss');
   
   let durationDate = '';
@@ -165,7 +206,27 @@ function addTask(jobId, formData) {
 function addDefect(taskId, defectData) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('DEFECT');
-  const newId = 'DEF-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
+  const data = sheet.getDataRange().getValues();
+
+  let maxNum = 0;
+  
+  // หารหัส Defect ล่าสุดของ TaskID นี้เพื่อรันเลข 00A
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] === taskId) { // คอลัมน์ B คือ TaskID
+      const id = data[i][0];
+      const parts = id.split('-DF');
+      if (parts.length >= 2) {
+        const num = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+  }
+
+  // สร้าง DefectID รูปแบบ: {TaskID}-DF00A
+  const newNumStr = String(maxNum + 1).padStart(3, '0');
+  const newId = `${taskId}-DF${newNumStr}`;
 
   function uploadBase64(base64Str, filename) {
     if (!base64Str) return '';
