@@ -8,7 +8,6 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
-// 1. อัปเดตโครงสร้าง Sheet DEFECT ให้ตรงกับ Col A ถึง O
 function initSheets() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheetsInfo = {
@@ -18,8 +17,11 @@ function initSheets() {
       'DefectID', 'TaskID', 'TargetStartDate', 'TargetEndDate', 'Status', 'MainCategory', 
       'SubCategory', 'Description', 'Major', 'Team', 'ImgUnit', 'ImgBefore', 'ImgDuring', 'ImgAfter', 'Timestamp', 
       'VOSteps', 'ActualStartDate', 'ActualEndDate', 'Remark' 
-    ]
+    ],
+    // เพิ่ม Sheet User
+    'User': ['UserID', 'Password', 'FullName', 'Timestamp'] 
   };
+
   Object.keys(sheetsInfo).forEach(name => {
     let sheet = ss.getSheetByName(name);
     if (!sheet) {
@@ -944,4 +946,51 @@ function exportDefectReportToPDF(taskId) {
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   
   return JSON.stringify({ taskId: targetTask.id, url: file.getUrl() });
+}
+
+// --- ฟังก์ชันสำหรับระบบ Auth ---
+function registerUser(formData) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName('User');
+  if (!sheet) {
+    initSheets();
+    sheet = ss.getSheetByName('User');
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  // เช็คว่า User ID ซ้ำหรือไม่
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === formData.userId) {
+      throw new Error('User ID นี้มีผู้ใช้งานแล้ว กรุณาใช้ชื่ออื่น');
+    }
+  }
+
+  // บันทึกข้อมูลลง Sheet (Col A = UserID, Col B = Password, Col C = FullName, Col D = Timestamp)
+  sheet.appendRow([
+    formData.userId,
+    formData.password,
+    formData.fullName,
+    new Date()
+  ]);
+  
+  return 'Success';
+}
+
+function loginUser(userId, password) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('User');
+  if (!sheet) throw new Error('ไม่พบฐานข้อมูลผู้ใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
+
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    // เช็ค User ID และ Password
+    if (data[i][0] === userId && data[i][1] === password) {
+      return { 
+        userId: data[i][0], 
+        fullName: data[i][2] 
+      };
+    }
+  }
+  
+  throw new Error('User ID หรือ รหัสผ่าน ไม่ถูกต้อง');
 }
